@@ -9,15 +9,14 @@
  * Storage:
  * - Per-project identity: `{project}/.llm-wiki/project.json`
  *     `{ "id": "<uuid>", "createdAt": <ms> }`
- * - Global registry: Tauri plugin-store `app-state.json` key `projectRegistry`
+ * - Global registry: Server config store key `projectRegistry`
  *     `{ [id]: { id, path, name, lastOpened } }`
  */
 
-import { load } from "@tauri-apps/plugin-store"
+import { getConfig, setConfig } from "@/api/config"
 import { readFile, writeFile } from "@/commands/fs"
 import { normalizePath } from "@/lib/path-utils"
 
-const STORE_NAME = "app-state.json"
 const REGISTRY_KEY = "projectRegistry"
 
 export interface ProjectIdentity {
@@ -67,25 +66,19 @@ export async function ensureProjectId(projectPath: string): Promise<string> {
   return identity.id
 }
 
-// ── Global registry (Tauri plugin-store) ──────────────────────────────────
-
-async function getStore() {
-  return load(STORE_NAME, { autoSave: true, defaults: {} })
-}
+// ── Global registry (HTTP API config store) ───────────────────────────────
 
 export async function loadRegistry(): Promise<ProjectRegistry> {
   try {
-    const store = await getStore()
-    const registry = await store.get<ProjectRegistry>(REGISTRY_KEY)
-    return registry ?? {}
+    const registry = await getConfig(REGISTRY_KEY)
+    return (registry as ProjectRegistry) ?? {}
   } catch {
     return {}
   }
 }
 
 async function saveRegistry(registry: ProjectRegistry): Promise<void> {
-  const store = await getStore()
-  await store.set(REGISTRY_KEY, registry)
+  await setConfig(REGISTRY_KEY, registry)
 }
 
 /**

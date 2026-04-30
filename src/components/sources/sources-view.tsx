@@ -1,11 +1,9 @@
 import { useState, useEffect, useCallback } from "react"
-import { open } from "@tauri-apps/plugin-dialog"
-import { invoke } from "@tauri-apps/api/core"
 import { Plus, FileText, RefreshCw, BookOpen, Trash2, Folder, ChevronRight, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useWikiStore } from "@/stores/wiki-store"
-import { copyFile, listDirectory, readFile, writeFile, deleteFile, findRelatedWikiPages, preprocessFile } from "@/commands/fs"
+import { copyFile, copyDirectory, listDirectory, readFile, writeFile, deleteFile, findRelatedWikiPages, preprocessFile } from "@/commands/fs"
 import type { FileNode } from "@/types/wiki"
 import { enqueueIngest, enqueueBatch } from "@/lib/ingest-queue"
 import { hasUsableLlm } from "@/lib/has-usable-llm"
@@ -80,47 +78,15 @@ export function SourcesView() {
   async function handleImport() {
     if (!project) return
 
-    const selected = await open({
-      multiple: true,
-      title: "Import Source Files",
-      filters: [
-        {
-          name: "Documents",
-          extensions: [
-            "md", "mdx", "txt", "rtf", "pdf",
-            "html", "htm", "xml",
-            "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-            "odt", "ods", "odp", "epub", "pages", "numbers", "key",
-          ],
-        },
-        {
-          name: "Data",
-          extensions: ["json", "jsonl", "csv", "tsv", "yaml", "yml", "ndjson"],
-        },
-        {
-          name: "Code",
-          extensions: [
-            "py", "js", "ts", "jsx", "tsx", "rs", "go", "java",
-            "c", "cpp", "h", "rb", "php", "swift", "sql", "sh",
-          ],
-        },
-        {
-          name: "Images",
-          extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "tiff", "avif", "heic"],
-        },
-        {
-          name: "Media",
-          extensions: ["mp4", "webm", "mov", "avi", "mkv", "mp3", "wav", "ogg", "flac", "m4a"],
-        },
-        { name: "All Files", extensions: ["*"] },
-      ],
-    })
+    // Web mode: use a simple path prompt for file import
+    const input = window.prompt("Enter source file paths (comma-separated):")
+    if (!input) return
 
-    if (!selected || selected.length === 0) return
+    const paths = input.split(",").map((p) => p.trim()).filter(Boolean)
+    if (paths.length === 0) return
 
     setImporting(true)
     const pp = normalizePath(project.path)
-    const paths = Array.isArray(selected) ? selected : [selected]
 
     const importedPaths: string[] = []
     for (const sourcePath of paths) {
@@ -152,12 +118,9 @@ export function SourcesView() {
   async function handleImportFolder() {
     if (!project) return
 
-    const selected = await open({
-      directory: true,
-      title: "Import Source Folder",
-    })
-
-    if (!selected || typeof selected !== "string") return
+    // Web mode: use a simple path prompt for folder import
+    const selected = window.prompt("Enter the source folder path:")
+    if (!selected) return
 
     setImporting(true)
     const pp = normalizePath(project.path)
@@ -165,11 +128,8 @@ export function SourcesView() {
     const destDir = `${pp}/raw/sources/${folderName}`
 
     try {
-      // Recursively copy the folder
-      const copiedFiles: string[] = await invoke("copy_directory", {
-        source: selected,
-        destination: destDir,
-      })
+      // Recursively copy the folder via HTTP API
+      const copiedFiles: string[] = await copyDirectory(selected, destDir)
 
       console.log(`[Folder Import] Copied ${copiedFiles.length} files from ${folderName}`)
 

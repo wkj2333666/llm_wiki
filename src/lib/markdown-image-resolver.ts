@@ -1,39 +1,32 @@
 /**
- * Resolve markdown image `src` attributes so they actually load in
- * the Tauri webview.
+ * Resolve markdown image `src` attributes so they load in the browser.
  *
- * The problem: ingest writes images to `<project>/wiki/media/<slug>/`
- * and embeds them in generated wiki pages as
- * `![](media/<slug>/img-1.png)`. A markdown renderer interprets that
- * relative to the rendering page's URL — but in Tauri there IS no
- * URL context for arbitrary file paths, AND the wiki page may be
- * located deeper than `wiki/concepts/foo.md` so naive `../media/...`
- * fixups don't generalize.
+ * In web server mode, images are served via API endpoint.
  *
- * Convention we settle on:
- *
- *   - Any src starting with `http://`, `https://`, `data:`, `blob:`,
- *     `file:`, `tauri://` is passed through unchanged.
- *   - Any src starting with `/` (absolute) is wrapped with
- *     `convertFileSrc` directly — the path is the filesystem
- *     absolute path.
- *   - **Anything else is treated as relative to the project's
- *     `wiki/` root.** Generated content uses this form
- *     (`media/foo/img-1.png`); user-written content can use it too.
- *
- * The resolver returns a string that React's <img src=...> can load:
- * the appropriate `convertFileSrc(...)` URL or the original src
- * verbatim.
+ * Convention:
+ *   - Any src starting with `http://`, `https://`, `data:`, `blob:` is passed through unchanged.
+ *   - Any src starting with `/` (absolute) is served via `/api/fs/file?path=...`
+ *   - Anything else is treated as relative to the project's `wiki/` root.
  */
-import { convertFileSrc } from "@tauri-apps/api/core"
-import { normalizePath } from "@/lib/path-utils"
 
-const PASSTHROUGH_RE = /^(https?:|data:|blob:|file:|tauri:)/i
+import { normalizePath } from "@/lib/path-utils"
+import { getAuthToken } from "@/api/client"
+
+const PASSTHROUGH_RE = /^(https?:|data:|blob:)/i
+
+/**
+ * Convert a local file path to a URL that the browser can load.
+ * In web mode, this uses the API endpoint `/api/fs/file?path=...`.
+ */
+function convertFileSrc(path: string): string {
+  const token = getAuthToken()
+  const encodedPath = encodeURIComponent(path)
+  return `/api/fs/file?path=${encodedPath}&token=${token}`
+}
 
 /**
  * `projectPath` is the wiki project's root directory. When null
- * (no project loaded), the resolver passes srcs through unchanged
- * so it remains safe to call before a project is open.
+ * (no project loaded), the resolver passes srcs through unchanged.
  */
 export function resolveMarkdownImageSrc(
   rawSrc: string,
@@ -48,18 +41,13 @@ export function resolveMarkdownImageSrc(
   const isAbsolute =
     rawSrc.startsWith("/") || /^[a-zA-Z]:/.test(rawSrc) || rawSrc.startsWith("\\\\")
 
-  // Absolute paths get fed straight to convertFileSrc — the user (or
-  // some plugin) explicitly chose that path; we don't second-guess.
+  // Absolute paths get fed straight to convertFileSrc
   if (isAbsolute) return convertFileSrc(rawSrc)
 
-  // Strip a leading `./` for cleanliness; treat `media/foo.png` and
-  // `./media/foo.png` identically.
+  // Strip a leading `./` for cleanliness
   const cleaned = rawSrc.replace(/^\.\//, "")
 
-  // Resolve as wiki-root-relative. The markdown lives somewhere
-  // under wiki/ but we ignore its location — image references in
-  // generated content always use this convention so the path is
-  // stable regardless of page depth.
+  // Resolve as wiki-root-relative
   const absolute = `${pp}/wiki/${cleaned}`
   return convertFileSrc(absolute)
 }

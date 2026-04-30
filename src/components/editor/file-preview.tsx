@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from "react"
-import { convertFileSrc } from "@tauri-apps/api/core"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
@@ -20,6 +19,17 @@ import { resolveMarkdownImageSrc } from "@/lib/markdown-image-resolver"
 import { parseFrontmatter } from "@/lib/frontmatter"
 import { FrontmatterPanel } from "@/components/editor/frontmatter-panel"
 import { useWikiStore } from "@/stores/wiki-store"
+import { getAuthToken } from "@/api/client"
+
+/**
+ * Convert a local file path to a URL that the browser can load.
+ * In web mode, this uses the API endpoint `/api/fs/file?path=...`.
+ */
+function convertFileSrc(path: string): string {
+  const token = getAuthToken()
+  const encodedPath = encodeURIComponent(path)
+  return `/api/fs/file?path=${encodedPath}&token=${token}`
+}
 
 interface FilePreviewProps {
   filePath: string

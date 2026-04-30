@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react"
-import { open } from "@tauri-apps/plugin-dialog"
 import i18n from "@/i18n"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
@@ -30,20 +29,11 @@ function App() {
   }, [])
 
   // Dev-only helper for visually testing the update-banner UX.
-  // Open dev tools and run:
-  //   __llmwiki_testUpdateBanner()
-  // to inject a fake "available" result into the update store —
-  // banner appears at the top + red dot lights up the gear icon.
-  // Run again with arg `false` (or call setDismissed via the store)
-  // to clear. Gated on `import.meta.env.DEV` so the helper never
-  // ships in production builds.
   useEffect(() => {
     if (!import.meta.env.DEV) return
     ;(async () => {
       const storeMod = await import("@/stores/update-store")
       const { useUpdateStore } = storeMod
-      // Expose the live store getter on window so you can inspect
-      // state from devtools when debugging banner behavior.
       ;(window as unknown as { __llmwiki_updateStore?: typeof useUpdateStore }).__llmwiki_updateStore = useUpdateStore
       ;(window as unknown as { __llmwiki_testUpdateBanner?: (clear?: boolean) => void }).__llmwiki_testUpdateBanner = (clear = false) => {
         if (clear) {
@@ -82,13 +72,7 @@ function App() {
     })()
   }, [])
 
-  // Background update check — hydrate persisted user preferences, then
-  // hit GitHub at most once every UPDATE_CHECK_CACHE_MS. Runs 1.5 s
-  // after mount so it doesn't contend with the heaviest startup work
-  // (project load, file tree, vector store init) but still surfaces
-  // a new release in time for the user to notice it during their
-  // first interaction. Silent on failure; the UI in Settings → About
-  // lets the user retry manually.
+  // Background update check
   useEffect(() => {
     let cancelled = false
     const timer = setTimeout(async () => {
@@ -112,16 +96,6 @@ function App() {
         }
 
         const now = Date.now()
-        // Cache hit requires BOTH the timestamp AND the in-memory
-        // result to be present. `lastCheckedAt` is persisted to
-        // disk but `lastResult` deliberately is not — keeping the
-        // GitHub payload out of the persisted store keeps disk
-        // size + privacy footprint small. The downside: a fresh
-        // cold start has `lastResult === null` even when
-        // `lastCheckedAt` is recent, in which case we MUST refetch
-        // — otherwise we'd skip the check AND have no result to
-        // display, leaving the banner permanently stuck off.
-        // (This was the user-reported bug: "kind=none, no banner".)
         const fresh =
           state.lastCheckedAt !== null &&
           state.lastResult !== null &&
@@ -187,13 +161,6 @@ function App() {
         const savedActivePreset = await loadActivePresetId()
         if (savedActivePreset) {
           useWikiStore.getState().setActivePresetId(savedActivePreset)
-          // Re-resolve the active preset's LlmConfig from (preset defaults
-          // + saved overrides). Without this, preset default updates
-          // (e.g. a corrected Anthropic model ID shipped in a release)
-          // never reach users who are relying on defaults — their stored
-          // `llmConfig` snapshot from a previous launch would keep the
-          // old value. Overrides still win, so an explicit user choice
-          // is preserved.
           const { LLM_PRESETS } = await import("@/components/settings/llm-presets")
           const { resolveConfig } = await import("@/components/settings/preset-resolver")
           const preset = LLM_PRESETS.find((p) => p.id === savedActivePreset)
@@ -245,23 +212,15 @@ function App() {
   }, [])
 
   async function handleProjectOpened(proj: WikiProject) {
-    // Clear all per-project state BEFORE loading new project data
-    // to prevent cross-project contamination. MUST be awaited so the
-    // ingest queue / graph cache are actually cleared before the new
-    // project's state is populated.
     const { resetProjectState } = await import("@/lib/reset-project-state")
     await resetProjectState()
 
     setProject(proj)
     setSelectedFile(null)
     setActiveView("wiki")
-    // Bump data version so any cached graphs/views invalidate
     useWikiStore.getState().bumpDataVersion()
     await saveLastProject(proj)
 
-    // Restore ingest queue (resume interrupted tasks). Keyed by the
-    // project's stable UUID so the queue still finds the right project
-    // even if the filesystem path changed since the task was enqueued.
     import("@/lib/ingest-queue").then(({ restoreQueue }) => {
       restoreQueue(proj.id, proj.path).catch((err) =>
         console.error("Failed to restore ingest queue:", err)
@@ -274,7 +233,6 @@ function App() {
       body: JSON.stringify({ path: proj.path }),
     }).catch(() => {})
 
-    // Send all recent projects to clip server for extension project picker
     getRecentProjects().then((recents) => {
       const projects = recents.map((p) => ({ name: p.name, path: p.path }))
       fetch("http://127.0.0.1:19827/projects", {
@@ -289,7 +247,6 @@ function App() {
     } catch (err) {
       console.error("Failed to load file tree:", err)
     }
-    // Load persisted review items
     try {
       const savedReview = await loadReviewItems(proj.path)
       if (savedReview.length > 0) {
@@ -298,13 +255,11 @@ function App() {
     } catch {
       // ignore, start fresh
     }
-    // Load persisted chat history
     try {
       const savedChat = await loadChatHistory(proj.path)
       if (savedChat.conversations.length > 0) {
         useChatStore.getState().setConversations(savedChat.conversations)
         useChatStore.getState().setMessages(savedChat.messages)
-        // Set most recent conversation as active
         const sorted = [...savedChat.conversations].sort((a, b) => b.updatedAt - a.updatedAt)
         if (sorted[0]) {
           useChatStore.getState().setActiveConversation(sorted[0].id)
@@ -324,15 +279,13 @@ function App() {
     }
   }
 
+  // In web mode, we use a simple path input instead of native file dialog
   async function handleOpenProject() {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: "Open Wiki Project",
-    })
-    if (!selected) return
+    // Prompt user for project path via a simple input
+    const path = window.prompt("Enter the project directory path:")
+    if (!path) return
     try {
-      const proj = await openProject(selected)
+      const proj = await openProject(path)
       await handleProjectOpened(proj)
     } catch (err) {
       window.alert(`Failed to open project: ${err}`)
@@ -340,8 +293,6 @@ function App() {
   }
 
   async function handleSwitchProject() {
-    // Clear all per-project state BEFORE flipping back to the welcome screen
-    // so old data cannot leak in via any async render pass.
     const { resetProjectState } = await import("@/lib/reset-project-state")
     await resetProjectState()
     setProject(null)

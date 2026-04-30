@@ -1,88 +1,85 @@
-import { invoke } from "@tauri-apps/api/core"
-import type { FileNode, WikiProject } from "@/types/wiki"
+// File system API wrapper - now uses HTTP API instead of Tauri
+import {
+  readFile as apiReadFile,
+  writeFile as apiWriteFile,
+  listDirectory as apiListDirectory,
+  copyFile as apiCopyFile,
+  copyDirectory as apiCopyDirectory,
+  preprocessFile as apiPreprocessFile,
+  deleteFile as apiDeleteFile,
+  createDirectory as apiCreateDirectory,
+  fileExists as apiFileExists,
+  readFileAsBase64 as apiReadFileAsBase64,
+  findRelatedWikiPages as apiFindRelatedWikiPages,
+} from "@/api/fs"
+import { createProject as apiCreateProject, openProject as apiOpenProject } from "@/api/project"
+import { clipServerStatus as apiClipServerStatus } from "@/api/clip"
 import { ensureProjectId, upsertProjectInfo } from "@/lib/project-identity"
-
-/** Raw shape returned by the Rust commands — id is attached client-side. */
-interface RawProject {
-  name: string
-  path: string
-}
+import type { FileNode, WikiProject } from "@/types/wiki"
 
 export async function readFile(path: string): Promise<string> {
-  return invoke<string>("read_file", { path })
+  return apiReadFile(path)
 }
 
 export async function writeFile(path: string, contents: string): Promise<void> {
-  return invoke<void>("write_file", { path, contents })
+  return apiWriteFile(path, contents)
 }
 
 export async function listDirectory(path: string): Promise<FileNode[]> {
-  return invoke<FileNode[]>("list_directory", { path })
+  return apiListDirectory(path)
 }
 
-export async function copyFile(
-  source: string,
-  destination: string
-): Promise<void> {
-  return invoke("copy_file", { source, destination })
+export async function copyFile(source: string, destination: string): Promise<void> {
+  return apiCopyFile(source, destination)
+}
+
+export async function copyDirectory(source: string, destination: string): Promise<string[]> {
+  return apiCopyDirectory(source, destination)
 }
 
 export async function preprocessFile(path: string): Promise<string> {
-  return invoke<string>("preprocess_file", { path })
+  return apiPreprocessFile(path)
 }
 
 export async function deleteFile(path: string): Promise<void> {
-  return invoke("delete_file", { path })
-}
-
-export async function findRelatedWikiPages(
-  projectPath: string,
-  sourceName: string
-): Promise<string[]> {
-  return invoke<string[]>("find_related_wiki_pages", { projectPath, sourceName })
+  return apiDeleteFile(path)
 }
 
 export async function createDirectory(path: string): Promise<void> {
-  return invoke<void>("create_directory", { path })
+  return apiCreateDirectory(path)
 }
 
 export async function fileExists(path: string): Promise<boolean> {
-  return invoke<boolean>("file_exists", { path })
+  return apiFileExists(path)
 }
 
-/** Mirror of `commands::fs::FileBase64` (Rust side). */
 export interface FileBase64 {
   base64: string
   mimeType: string
 }
 
-/**
- * Read any file off disk as base64 + a guessed mime type. The
- * vision-caption pipeline uses this to pick up extracted images
- * without having to read them as UTF-8 strings (PNG bytes aren't
- * valid UTF-8 — `readFile` would corrupt them).
- */
 export async function readFileAsBase64(path: string): Promise<FileBase64> {
-  return invoke<FileBase64>("read_file_as_base64", { path })
+  return apiReadFileAsBase64(path)
 }
 
-export async function createProject(
-  name: string,
-  path: string,
-): Promise<WikiProject> {
-  const raw = await invoke<RawProject>("create_project", { name, path })
-  const id = await ensureProjectId(raw.path)
-  await upsertProjectInfo(id, raw.path, raw.name)
-  return { id, name: raw.name, path: raw.path }
+export async function createProject(name: string, path: string): Promise<WikiProject> {
+  const project = await apiCreateProject(name, path)
+  const id = await ensureProjectId(project.path)
+  await upsertProjectInfo(id, project.path, project.name)
+  return { id, name: project.name, path: project.path }
 }
 
 export async function openProject(path: string): Promise<WikiProject> {
-  const raw = await invoke<RawProject>("open_project", { path })
-  const id = await ensureProjectId(raw.path)
-  await upsertProjectInfo(id, raw.path, raw.name)
-  return { id, name: raw.name, path: raw.path }
+  const project = await apiOpenProject(path)
+  const id = await ensureProjectId(project.path)
+  await upsertProjectInfo(id, project.path, project.name)
+  return { id, name: project.name, path: project.path }
 }
 
 export async function clipServerStatus(): Promise<string> {
-  return invoke<string>("clip_server_status")
+  return apiClipServerStatus()
+}
+
+export async function findRelatedWikiPages(projectPath: string, sourceName: string): Promise<string[]> {
+  return apiFindRelatedWikiPages(projectPath, sourceName)
 }

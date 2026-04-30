@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { ChevronDown, ChevronRight, AlertCircle, CheckCircle2, Loader2, XCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { invoke } from "@tauri-apps/api/core"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useWikiStore, type ProviderOverride } from "@/stores/wiki-store"
@@ -9,6 +8,7 @@ import { LLM_PRESETS, type LlmPreset } from "../llm-presets"
 import { ContextSizeSelector } from "../context-size-selector"
 import { resolveConfig } from "../preset-resolver"
 import { normalizeEndpoint } from "@/lib/endpoint-normalizer"
+import { detectClaudeCli } from "@/api/claude"
 
 export function LlmProviderSection() {
   const { t } = useTranslation()
@@ -421,17 +421,16 @@ function ModelPicker({ value, suggestions, placeholder, onChange }: ModelPickerP
 
 interface DetectResult {
   installed: boolean
-  version: string | null
-  path: string | null
-  error: string | null
+  version?: string
+  path?: string
+  error?: string
 }
 
 /**
  * Health-check pill for the Claude Code CLI provider. Auto-runs
  * `claude --version` on mount, with a refresh button for when the user
  * just installed the binary and wants to re-check without reopening the
- * panel. The error message comes straight from the Rust side — it
- * already tailors the hint (macOS quarantine, missing binary, etc).
+ * panel. The error message comes straight from the server side.
  */
 function ClaudeCliStatusPill() {
   const [state, setState] = useState<"loading" | "ok" | "err">("loading")
@@ -440,14 +439,12 @@ function ClaudeCliStatusPill() {
   async function detect() {
     setState("loading")
     try {
-      const r = await invoke<DetectResult>("claude_cli_detect")
+      const r = await detectClaudeCli()
       setResult(r)
       setState(r.installed ? "ok" : "err")
     } catch (e) {
       setResult({
         installed: false,
-        version: null,
-        path: null,
         error: e instanceof Error ? e.message : String(e),
       })
       setState("err")

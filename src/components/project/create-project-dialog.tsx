@@ -1,12 +1,10 @@
 import { useState } from "react"
-import { open } from "@tauri-apps/plugin-dialog"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { FolderOpen } from "lucide-react"
 import { createProject, writeFile, createDirectory } from "@/commands/fs"
 import { getTemplate } from "@/lib/templates"
 import { TemplatePicker } from "@/components/project/template-picker"
@@ -26,26 +24,10 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
   const [name, setName] = useState("")
   const [path, setPath] = useState("")
   const [selectedTemplate, setSelectedTemplate] = useState("general")
-  // Empty string = "user hasn't picked yet"; we validate this on
-  // submit so a fresh project never starts in implicit auto-detect
-  // mode. Once chosen, the value is one of OUTPUT_LANGUAGE_OPTIONS
-  // (`auto` is a valid explicit choice — the user is then opting
-  // INTO auto-detect rather than getting it by accident).
   const [language, setLanguage] = useState<string>("")
   const [error, setError] = useState("")
   const [creating, setCreating] = useState(false)
   const setOutputLanguage = useWikiStore((s) => s.setOutputLanguage)
-
-  async function handleBrowse() {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: "Select Parent Directory",
-    })
-    if (selected) {
-      setPath(selected)
-    }
-  }
 
   async function handleCreate() {
     if (!name.trim() || !path.trim()) {
@@ -69,10 +51,6 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
         await createDirectory(`${pp}/${dir}`)
       }
 
-      // Persist the user's language choice. The store / disk
-      // mirror is what the rest of the app reads via
-      // `getOutputLanguage()` — without this write the choice
-      // wouldn't survive past the dialog closing.
       const lang = language as OutputLanguage
       setOutputLanguage(lang)
       await saveOutputLanguage(lang)
@@ -118,16 +96,6 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
               <option value="" disabled>
                 Pick a language…
               </option>
-              {/*
-                * "auto" is intentionally filtered out at project
-                * creation time. Auto-detect is a fine post-hoc
-                * setting (Settings → Output) for users who later
-                * decide they want it, but at create time we force
-                * an explicit commitment so the project never starts
-                * in the implicit-detect mode that was the source
-                * of "wiki content showed up in a language I didn't
-                * expect" surprises.
-                */}
               {OUTPUT_LANGUAGE_OPTIONS.filter((l) => l.value !== "auto").map((l) => (
                 <option key={l.value} value={l.value}>
                   {l.label}
@@ -142,12 +110,16 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="path">Parent Directory</Label>
-            <div className="flex gap-2">
-              <Input id="path" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/Users/you/projects" className="flex-1" />
-              <Button variant="outline" size="icon" onClick={handleBrowse} type="button">
-                <FolderOpen className="h-4 w-4" />
-              </Button>
-            </div>
+            <Input
+              id="path"
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              placeholder="/home/user/projects"
+              className="flex-1"
+            />
+            <p className="text-xs text-muted-foreground">
+              Enter the directory where the project folder will be created.
+            </p>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>

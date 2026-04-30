@@ -1,22 +1,15 @@
 /**
  * Image extraction orchestration for the ingest pipeline.
  *
- * Pure dispatch + path-shaping layer over the Rust commands
- * `extract_and_save_pdf_images_cmd` / `extract_and_save_office_images_cmd`.
- * Decides which command to call based on file extension, computes the
+ * Pure dispatch + path-shaping layer over the HTTP API.
+ * Decides which endpoint to call based on file extension, computes the
  * destination directory (`wiki/media/<source-slug>/`), and gives back
- * a small markdown snippet ready to paste into the LLM's source
- * context.
- *
- * NOTE: this layer does NOT call any LLM (no captions yet — that's
- * Phase 3a). The alt text on each image is a placeholder; once
- * captioning lands, the same helper grows a `caption` field per
- * image and the markdown line uses that instead.
+ * a small markdown snippet ready to paste into the LLM's source context.
  */
-import { invoke } from "@tauri-apps/api/core"
+import { apiPost } from "@/api/client"
 import { getFileName, normalizePath } from "@/lib/path-utils"
 
-/** Mirrors `commands::extract_images::SavedImage` on the Rust side. */
+/** Saved image metadata from extraction. */
 export interface SavedImage {
   index: number
   mimeType: string
@@ -26,33 +19,22 @@ export interface SavedImage {
   height: number
   /** Path relative to the wiki/ root, e.g. `media/rope-paper/img-1.png`. */
   relPath: string
-  /** Absolute filesystem path — used by `convertFileSrc` for preview. */
+  /** Absolute filesystem path — used for preview. */
   absPath: string
   sha256: string
 }
 
-/** File extensions we currently extract images from. Excludes XLS/XLSX
- *  because spreadsheets generally don't have charts as images (charts
- *  are XML-rendered shapes, not embedded raster). Adding them later is
- *  a one-line change here. */
 const SUPPORTED_PDF_EXTS = ["pdf"] as const
 const SUPPORTED_OFFICE_EXTS = ["pptx", "docx", "ppt", "doc"] as const
-// Note: ppt / doc (legacy binary formats) won't actually work — they
-// aren't ZIP. Listed for completeness; Rust side will return Err which
-// the caller treats as "no images" gracefully.
 
 /**
  * Extract every embedded image from `sourcePath` and save them to
- * `<projectPath>/wiki/media/<slug>/`. Returns metadata only — image
- * bytes never traverse JS (the Rust command writes directly).
+ * `<projectPath>/wiki/media/<slug>/`. Returns metadata only.
  *
  * Returns `[]` for unsupported file types or when the source has no
  * extractable images. Errors during extraction are logged and returned
  * as an empty array — image extraction failure must NEVER abort the
- * ingest pipeline (which is why this isn't `throws`).
- *
- * `slug` is the basename of the source file without extension. Same
- * convention the rest of ingest uses (see `wiki/sources/<slug>.md`).
+ * ingest pipeline.
  */
 export async function extractAndSaveSourceImages(
   projectPath: string,
@@ -72,17 +54,10 @@ export async function extractAndSaveSourceImages(
   const relTo = `${pp}/wiki`
 
   try {
-    const images = await invoke<unknown[]>(
-      isPdf ? "extract_and_save_pdf_images_cmd" : "extract_and_save_office_images_cmd",
-      { sourcePath: sp, destDir, relTo },
+    const images = await apiPost<unknown[]>(
+      "/fs/extract-images",
+      { sourcePath: sp, destDir, relTo, isPdf },
     )
-    // Rust's `SavedImage` is `#[serde(rename_all = "camelCase")]`,
-    // so the wire format uses `relPath` / `absPath` / `mimeType`.
-    // (Note: Tauri's IPC auto-camelCase applies only to command
-    // PARAMETER names, never to return-value field names — without
-    // the explicit serde attribute on the Rust struct, this filter
-    // would drop every item and return `[]` even when extraction
-    // wrote images to disk. We had that bug.)
     return images
       .filter((it): it is SavedImage => {
         if (!it || typeof it !== "object") return false
@@ -103,21 +78,29 @@ export async function extractAndSaveSourceImages(
 }
 
 /**
+ * Given a list of saved images, return a markdown snippet that
+ * references each one. The snippet is suitable for pasting into
+ * the LLM's source context.
+ */
+export function imagesMarkdownSnippet(images: SavedImage[]): string {
+  if (images.length === 0) return ""
+
+  const lines = images.map((img) => {
+    const alt = img.page ? `Image from page ${img.page}` : `Image ${img.index + 1}`
+    return `![${alt}](${img.relPath})`
+  })
+
+  return `\n\n---\n\n### Embedded Images\n\n${lines.join("\n")}\n`
+}
+
+/**
  * Build the markdown section to splice into `sourceContent` so the
  * generation LLM sees the available images. Each image is referenced
- * once by its rel_path with a placeholder alt-text (Phase 3a will
- * replace this with VLM-generated captions).
+ * once by its rel_path with caption text as alt.
  *
  * Returns an empty string when there are no images — no leading
  * separator gets inserted, which keeps the prompt size unchanged for
  * pure-text documents.
- *
- * Placement: caller appends this AFTER the source's text content so
- * the LLM still reads the document linearly, then sees images at the
- * end with their page numbers as positional anchors. A future
- * refinement (per the plan) is to insert per-page image listings
- * inline at page breaks; that requires the text extractor to emit
- * page boundaries, which it doesn't yet.
  */
 export function buildImageMarkdownSection(
   images: SavedImage[],
@@ -158,11 +141,7 @@ export function buildImageMarkdownSection(
     for (const img of byPage.get(key) ?? []) {
       // Caption lookup by SHA-256 — same key the caption pipeline
       // uses to dedupe across documents. Falling back to empty alt
-      // text if no caption is available for this image (caption
-      // pipeline disabled / failed / didn't run yet on cache hit).
-      // Empty alt is still better than no image reference at all
-      // — the inline LLM-generated text might cite the image by
-      // page number anyway.
+      // text if no caption is available for this image.
       const caption = captionsBySha?.get(img.sha256)
       const alt = caption ? sanitize(caption) : ""
       lines.push(`![${alt}](${img.relPath})`)
