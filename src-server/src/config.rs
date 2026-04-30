@@ -8,6 +8,7 @@ pub struct ServerConfig {
     pub token: String,
     pub data_dir: PathBuf,
     pub static_dir: PathBuf,
+    pub projects_dir: PathBuf,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -52,6 +53,9 @@ impl Default for ServerConfig {
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join("llm-wiki-server"),
             static_dir: PathBuf::from("dist-server/public"),
+            projects_dir: dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("wiki-projects"),
         }
     }
 }
@@ -161,6 +165,7 @@ impl AppConfig {
         // Expand ~ in paths
         config.server.data_dir = expand_home(&config.server.data_dir);
         config.server.static_dir = expand_home(&config.server.static_dir);
+        config.server.projects_dir = expand_home(&config.server.projects_dir);
 
         // Validate required fields
         if config.server.token.is_empty() {

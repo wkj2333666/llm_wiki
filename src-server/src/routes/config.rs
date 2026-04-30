@@ -1,5 +1,5 @@
 use axum::{
-    extract::State,
+    extract::{State, Query},
     Json,
 };
 use serde::Deserialize;
@@ -13,9 +13,9 @@ pub struct GetConfigQuery {
     key: String,
 }
 
-/// Get config value by key
+/// Get config value by key (uses query parameter, not JSON body)
 pub async fn get_config(
-    Json(query): Json<GetConfigQuery>,
+    Query(query): Query<GetConfigQuery>,
 ) -> Result<Json<Value>, String> {
     // TODO: implement using db::get_config
     Ok(Json(Value::Null))

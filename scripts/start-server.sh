@@ -46,7 +46,7 @@ fi
 # Set config file path for server
 export LLM_WIKI_CONFIG="$CONFIG_FILE"
 
-echo "LLM Wiki Web Server"
+echo "LLM Wiki Web Server (Release)"
 echo "  Config file:    $CONFIG_FILE"
 echo "  Server binary:  $SCRIPT_DIR/src-server/target/release/llm-wiki-server"
 echo ""

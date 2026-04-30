@@ -270,28 +270,6 @@ function App() {
     }
   }
 
-  async function handleSelectRecent(proj: WikiProject) {
-    try {
-      const validated = await openProject(proj.path)
-      await handleProjectOpened(validated)
-    } catch (err) {
-      window.alert(`Failed to open project: ${err}`)
-    }
-  }
-
-  // In web mode, we use a simple path input instead of native file dialog
-  async function handleOpenProject() {
-    // Prompt user for project path via a simple input
-    const path = window.prompt("Enter the project directory path:")
-    if (!path) return
-    try {
-      const proj = await openProject(path)
-      await handleProjectOpened(proj)
-    } catch (err) {
-      window.alert(`Failed to open project: ${err}`)
-    }
-  }
-
   async function handleSwitchProject() {
     const { resetProjectState } = await import("@/lib/reset-project-state")
     await resetProjectState()
@@ -313,8 +291,7 @@ function App() {
       <>
         <WelcomeScreen
           onCreateProject={() => setShowCreateDialog(true)}
-          onOpenProject={handleOpenProject}
-          onSelectProject={handleSelectRecent}
+          onSelectProject={handleProjectOpened}
         />
         <CreateProjectDialog
           open={showCreateDialog}

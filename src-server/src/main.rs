@@ -81,8 +81,10 @@ async fn main() {
         .route("/fs/file", get(routes::fs::serve_file))
         .route("/fs/extract-images", post(routes::fs::extract_images))
         // Project
+        .route("/project/list", get(routes::project::list_projects))
         .route("/project/create", post(routes::project::create_project))
         .route("/project/open", post(routes::project::open_project))
+        .route("/project/open-path", post(routes::project::open_project_by_path))
         // Vector store
         .route("/vector/upsert", post(routes::vector::upsert_chunks))
         .route("/vector/search", post(routes::vector::search_chunks))

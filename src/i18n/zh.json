@@ -23,14 +23,20 @@
   "welcome": {
     "newProject": "新建项目",
     "openProject": "打开项目",
-    "recentProjects": "最近项目"
+    "recentProjects": "最近项目",
+    "loadingProjects": "加载中...",
+    "availableProjects": "可用项目",
+    "noProjects": "未找到项目。请创建新项目。",
+    "invalidProject": "非 Wiki 项目"
   },
   "project": {
     "createTitle": "新建 Wiki 项目",
     "name": "项目名称",
     "namePlaceholder": "my-research-wiki",
+    "nameRequired": "请输入项目名称",
     "parentDir": "父目录",
     "template": "模板",
+    "serverDirHint": "项目将创建在服务器配置的目录下",
     "cancel": "取消",
     "create": "创建",
     "creating": "创建中..."

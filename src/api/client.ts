@@ -1,19 +1,11 @@
 /**
  * Base API client for LLM Wiki Web Server.
- * All API calls require Bearer token authentication.
+ *
+ * Authentication is handled by Caddy reverse proxy (basicauth).
+ * No API-level auth needed for single-user self-hosted scenario.
  */
 
 const API_BASE = '/api';
-
-let authToken: string | null = null;
-
-export function setAuthToken(token: string) {
-  authToken = token;
-}
-
-export function getAuthToken(): string | null {
-  return authToken;
-}
 
 export async function apiFetch<T>(
   path: string,
@@ -23,10 +15,6 @@ export async function apiFetch<T>(
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
-
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
-  }
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -65,3 +53,7 @@ export async function apiDelete<T>(path: string, body?: unknown): Promise<T> {
     body: body ? JSON.stringify(body) : undefined,
   });
 }
+
+// Placeholder functions kept for compatibility (not used when token is empty)
+export function setAuthToken(_token: string) {}
+export function getAuthToken(): string | null { return null; }

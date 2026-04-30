@@ -12,7 +12,7 @@ import {
   readFileAsBase64 as apiReadFileAsBase64,
   findRelatedWikiPages as apiFindRelatedWikiPages,
 } from "@/api/fs"
-import { createProject as apiCreateProject, openProject as apiOpenProject } from "@/api/project"
+import { createProject as apiCreateProject, openProject as apiOpenProject, listProjects as apiListProjects } from "@/api/project"
 import { clipServerStatus as apiClipServerStatus } from "@/api/clip"
 import { ensureProjectId, upsertProjectInfo } from "@/lib/project-identity"
 import type { FileNode, WikiProject } from "@/types/wiki"
@@ -62,18 +62,22 @@ export async function readFileAsBase64(path: string): Promise<FileBase64> {
   return apiReadFileAsBase64(path)
 }
 
-export async function createProject(name: string, path: string): Promise<WikiProject> {
+export async function createProject(name: string, path?: string): Promise<WikiProject> {
   const project = await apiCreateProject(name, path)
   const id = await ensureProjectId(project.path)
   await upsertProjectInfo(id, project.path, project.name)
   return { id, name: project.name, path: project.path }
 }
 
-export async function openProject(path: string): Promise<WikiProject> {
-  const project = await apiOpenProject(path)
+export async function openProject(nameOrPath: string): Promise<WikiProject> {
+  const project = await apiOpenProject(nameOrPath)
   const id = await ensureProjectId(project.path)
   await upsertProjectInfo(id, project.path, project.name)
   return { id, name: project.name, path: project.path }
+}
+
+export async function listProjects(): Promise<{ name: string; path: string; has_wiki: boolean }[]> {
+  return apiListProjects()
 }
 
 export async function clipServerStatus(): Promise<string> {

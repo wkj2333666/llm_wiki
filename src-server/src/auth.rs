@@ -9,8 +9,12 @@ use axum::{
 use crate::AppState;
 
 /// Auth middleware for API routes.
-/// Requires Bearer token matching the token from config.
-/// If no token is configured, all requests are allowed (development mode).
+///
+/// For single-user self-hosted scenario with Caddy basicauth:
+/// - Caddy handles authentication at the reverse proxy level
+/// - API server trusts all requests (no additional auth needed)
+///
+/// If you want API-level auth, set a non-empty token in server.toml
 pub async fn auth_middleware(
     State(state): State<AppState>,
     request: Request<Body>,
@@ -18,23 +22,13 @@ pub async fn auth_middleware(
 ) -> Result<Response, StatusCode> {
     let token = &state.config.server.token;
 
-    // If no token configured, allow all requests (development mode)
+    // If no token configured, trust all requests
+    // (authentication is handled by Caddy basicauth)
     if token.is_empty() {
         return Ok(next.run(request).await);
     }
 
-    // Also allow token passed as query param (for file serving in browser)
-    let query_token = request.uri().query()
-        .and_then(|q| {
-            q.split('&')
-                .find(|p| p.starts_with("token="))
-                .map(|p| p.strip_prefix("token=").unwrap_or(""))
-        });
-
-    if query_token == Some(token.as_str()) {
-        return Ok(next.run(request).await);
-    }
-
+    // If token is configured, require it
     let auth_header = request
         .headers()
         .get("Authorization")
