@@ -2,6 +2,7 @@ use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
+use crate::db;
 use crate::types::WikiProject;
 
 #[derive(Deserialize)]
@@ -12,13 +13,14 @@ pub struct CreateProjectBody {
 }
 
 /// Create a new wiki project
-/// If path is empty, uses server's configured projects_dir
+/// If path is empty or whitespace, uses server's configured projects_dir
 pub async fn create_project(
     State(state): State<AppState>,
     Json(body): Json<CreateProjectBody>,
 ) -> Result<Json<WikiProject>, String> {
-    // Use server's projects_dir if no path specified
+    // Use server's projects_dir if no path specified or path is empty/whitespace
     let base_path = body.path
+        .filter(|p| !p.trim().is_empty())
         .map(|p| std::path::PathBuf::from(p))
         .unwrap_or_else(|| state.config.server.projects_dir.clone());
 
@@ -44,6 +46,11 @@ pub async fn create_project(
         name: body.name,
         path: root.to_string_lossy().to_string(),
     };
+
+    // Save to database
+    db::add_to_recent_projects(&state.db, &project)
+        .await
+        .map_err(|e| format!("Failed to save project: {}", e))?;
 
     tracing::info!("Created project '{}' at '{}'", project.name, project.path);
 
@@ -77,12 +84,28 @@ pub async fn open_project(
         ));
     }
 
-    let id = uuid::Uuid::new_v4().to_string();
-    let project = WikiProject {
-        id,
-        name: body.name,
-        path: root.to_string_lossy().to_string(),
+    // Check if project exists in database, get existing ID
+    let existing = db::get_project_by_path(&state.db, &root.to_string_lossy())
+        .await
+        .map_err(|e| format!("Database error: {}", e))?;
+
+    let project = match existing {
+        Some(p) => p,
+        None => {
+            // New entry for project not yet in database
+            let id = uuid::Uuid::new_v4().to_string();
+            WikiProject {
+                id,
+                name: body.name,
+                path: root.to_string_lossy().to_string(),
+            }
+        }
     };
+
+    // Update database (refreshes last_opened_at and recent list order)
+    db::add_to_recent_projects(&state.db, &project)
+        .await
+        .map_err(|e| format!("Failed to update project: {}", e))?;
 
     tracing::info!("Opened project '{}' at '{}'", project.name, project.path);
 
@@ -96,6 +119,7 @@ pub struct OpenProjectByPathBody {
 
 /// Open an existing wiki project by full path (for projects outside projects_dir)
 pub async fn open_project_by_path(
+    State(state): State<AppState>,
     Json(body): Json<OpenProjectByPathBody>,
 ) -> Result<Json<WikiProject>, String> {
     let root = std::path::PathBuf::from(&body.path);
@@ -121,12 +145,27 @@ pub async fn open_project_by_path(
         .unwrap_or("Unknown")
         .to_string();
 
-    let id = uuid::Uuid::new_v4().to_string();
-    let project = WikiProject {
-        id,
-        name,
-        path: root.to_string_lossy().to_string(),
+    // Check if project exists in database
+    let existing = db::get_project_by_path(&state.db, &body.path)
+        .await
+        .map_err(|e| format!("Database error: {}", e))?;
+
+    let project = match existing {
+        Some(p) => p,
+        None => {
+            let id = uuid::Uuid::new_v4().to_string();
+            WikiProject {
+                id,
+                name,
+                path: root.to_string_lossy().to_string(),
+            }
+        }
     };
+
+    // Update database
+    db::add_to_recent_projects(&state.db, &project)
+        .await
+        .map_err(|e| format!("Failed to update project: {}", e))?;
 
     tracing::info!("Opened project '{}' at '{}'", project.name, project.path);
 
@@ -138,50 +177,102 @@ pub struct ProjectInfo {
     name: String,
     path: String,
     has_wiki: bool,
+    last_opened_at: Option<i64>,  // Unix timestamp, from database
 }
 
 /// List all projects in the configured projects_dir
+/// Also includes recent projects from database that may be outside projects_dir
 pub async fn list_projects(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ProjectInfo>>, String> {
     let projects_dir = &state.config.server.projects_dir;
 
+    // Create the directory if it doesn't exist
     if !projects_dir.exists() {
-        // Create the directory if it doesn't exist
         std::fs::create_dir_all(projects_dir)
             .map_err(|e| format!("Failed to create projects directory: {}", e))?;
-        return Ok(Json(Vec::new()));
     }
 
+    // Get recent projects from database for ordering and timestamps
+    let recent_projects = db::get_projects(&state.db)
+        .await
+        .map_err(|e| format!("Database error: {}", e))?;
+
+    // Fetch all last_opened_at timestamps in one batch
+    let mut last_opened_map: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    for p in &recent_projects {
+        if let Some(ts) = db::get_last_opened_at(&state.db, &p.id).await.ok().flatten() {
+            last_opened_map.insert(p.id.clone(), ts);
+        }
+    }
+
+    // Build path -> project lookup
+    let recent_path_map: std::collections::HashMap<String, WikiProject> = recent_projects
+        .iter()
+        .map(|p| (p.path.clone(), p.clone()))
+        .collect();
+
+    // Scan projects_dir
     let mut projects = Vec::new();
 
-    let entries = std::fs::read_dir(projects_dir)
-        .map_err(|e| format!("Failed to read projects directory: {}", e))?;
+    if projects_dir.exists() {
+        let entries = std::fs::read_dir(projects_dir)
+            .map_err(|e| format!("Failed to read projects directory: {}", e))?;
 
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-        let path = entry.path();
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+            let path = entry.path();
 
-        if path.is_dir() {
-            let name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("Unknown")
-                .to_string();
+            if path.is_dir() {
+                let name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("Unknown")
+                    .to_string();
 
-            // Check if it's a valid wiki project (has wiki folder)
-            let has_wiki = path.join("wiki").exists();
+                let has_wiki = path.join("wiki").exists();
+                let path_str = path.to_string_lossy().to_string();
+
+                // Get last_opened_at from pre-loaded map
+                let last_opened_at = recent_path_map.get(&path_str)
+                    .and_then(|p| last_opened_map.get(&p.id))
+                    .copied();
+
+                projects.push(ProjectInfo {
+                    name,
+                    path: path_str,
+                    has_wiki,
+                    last_opened_at,
+                });
+            }
+        }
+    }
+
+    // Also include recent projects that are outside projects_dir
+    for recent in recent_projects.iter() {
+        let recent_path = std::path::PathBuf::from(&recent.path);
+        if !recent_path.starts_with(projects_dir) && recent_path.exists() {
+            let has_wiki = recent_path.join("wiki").exists();
+            let last_opened_at = last_opened_map.get(&recent.id).copied();
 
             projects.push(ProjectInfo {
-                name,
-                path: path.to_string_lossy().to_string(),
+                name: recent.name.clone(),
+                path: recent.path.clone(),
                 has_wiki,
+                last_opened_at,
             });
         }
     }
 
-    // Sort by name
-    projects.sort_by(|a, b| a.name.cmp(&b.name));
+    // Sort: first by last_opened_at (most recent first), then by name
+    projects.sort_by(|a, b| {
+        match (a.last_opened_at, b.last_opened_at) {
+            (Some(a_time), Some(b_time)) => b_time.cmp(&a_time),  // Most recent first
+            (Some(_), None) => std::cmp::Ordering::Less,  // Has timestamp comes first
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => a.name.cmp(&b.name),
+        }
+    });
 
     Ok(Json(projects))
 }

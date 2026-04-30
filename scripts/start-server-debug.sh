@@ -3,10 +3,11 @@
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Get project root directory (scripts/ is one level below root)
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Default config file path
-CONFIG_FILE="${LLM_WIKI_CONFIG:-$SCRIPT_DIR/server.toml}"
+CONFIG_FILE="${LLM_WIKI_CONFIG:-$PROJECT_ROOT/server.toml}"
 
 # Check if config file exists
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -49,8 +50,8 @@ export LLM_WIKI_CONFIG="$CONFIG_FILE"
 
 echo "LLM Wiki Web Server (Debug)"
 echo "  Config file:    $CONFIG_FILE"
-echo "  Server binary:  $SCRIPT_DIR/src-server/target/debug/llm-wiki-server"
+echo "  Server binary:  $PROJECT_ROOT/src-server/target/debug/llm-wiki-server"
 echo ""
 
 # Start the server
-exec "$SCRIPT_DIR/src-server/target/debug/llm-wiki-server"
+exec "$PROJECT_ROOT/src-server/target/debug/llm-wiki-server"

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import i18n from "@/i18n"
+import { useTranslation } from "react-i18next"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { useChatStore } from "@/stores/chat-store"
@@ -11,9 +12,11 @@ import { startClipWatcher } from "@/lib/clip-watcher"
 import { AppLayout } from "@/components/layout/app-layout"
 import { WelcomeScreen } from "@/components/project/welcome-screen"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog"
+import { getServerConfig } from "@/api/config"
 import type { WikiProject } from "@/types/wiki"
 
 function App() {
+  const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
   const setProject = useWikiStore((s) => s.setProject)
   const setFileTree = useWikiStore((s) => s.setFileTree)
@@ -150,9 +153,47 @@ function App() {
   useEffect(() => {
     async function init() {
       try {
+        // Load server config first (from server.toml) as defaults
+        const serverConfig = await getServerConfig()
+        const defaultLlmConfig = {
+          provider: serverConfig.llm.provider as "openai" | "anthropic" | "google" | "ollama" | "custom" | "minimax" | "claude-code",
+          apiKey: serverConfig.llm.apiKey,
+          model: serverConfig.llm.model,
+          maxContextSize: serverConfig.llm.maxContextSize,
+          ollamaUrl: serverConfig.llm.ollamaUrl || "",
+          customEndpoint: serverConfig.llm.customEndpoint || "",
+          apiMode: (serverConfig.llm.apiMode || "chat_completions") as "chat_completions" | "anthropic_messages",
+        }
+        const defaultEmbeddingConfig = {
+          enabled: true,
+          endpoint: serverConfig.embedding.apiKey ? "" : "", // Use default endpoint logic
+          apiKey: serverConfig.embedding.apiKey,
+          model: serverConfig.embedding.model,
+        }
+        const defaultSearchConfig = {
+          provider: serverConfig.search.provider as "tavily" | "none",
+          apiKey: serverConfig.search.apiKey,
+        }
+
+        // Apply server defaults first
+        useWikiStore.getState().setLlmConfig(defaultLlmConfig)
+        useWikiStore.getState().setEmbeddingConfig(defaultEmbeddingConfig)
+        useWikiStore.getState().setSearchApiConfig(defaultSearchConfig)
+
+        // Then load saved user preferences (may override apiKey, model, but keep server endpoint)
         const savedConfig = await loadLlmConfig()
-        if (savedConfig) {
-          useWikiStore.getState().setLlmConfig(savedConfig)
+        if (savedConfig && savedConfig.apiKey) {
+          // User has valid saved config - merge with server defaults
+          const mergedConfig = {
+            ...defaultLlmConfig,
+            apiKey: savedConfig.apiKey,
+            model: savedConfig.model || defaultLlmConfig.model,
+            provider: savedConfig.provider || defaultLlmConfig.provider,
+            // Keep server's endpoint if saved doesn't have one
+            customEndpoint: savedConfig.customEndpoint || defaultLlmConfig.customEndpoint,
+            ollamaUrl: savedConfig.ollamaUrl || defaultLlmConfig.ollamaUrl,
+          }
+          useWikiStore.getState().setLlmConfig(mergedConfig)
         }
         const savedProviderConfigs = await loadProviderConfigs()
         if (savedProviderConfigs) {
@@ -281,7 +322,7 @@ function App() {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-muted-foreground">
-        Loading...
+        {t("welcome.loadingProjects", "加载中...")}
       </div>
     )
   }

@@ -68,8 +68,8 @@ const BASE_CONTRADICTION = `When sources contradict each other:
 
 const researchTemplate: WikiTemplate = {
   id: "research",
-  name: "Research",
-  description: "Deep-dive research with hypothesis tracking and methodology notes",
+  name: "学术研究",
+  description: "深度研究，追踪假设和方法论笔记",
   icon: "🔬",
   extraDirs: ["wiki/methodology", "wiki/findings", "wiki/thesis"],
   schema: `# Wiki Schema — Research Deep-Dive
@@ -188,8 +188,8 @@ ${BASE_CONTRADICTION}
 
 const readingTemplate: WikiTemplate = {
   id: "reading",
-  name: "Reading",
-  description: "Track a book's characters, themes, plot threads, and chapter notes",
+  name: "读书笔记",
+  description: "追踪角色、主题、情节线和章节笔记",
   icon: "📚",
   extraDirs: ["wiki/characters", "wiki/themes", "wiki/plot-threads", "wiki/chapters"],
   schema: `# Wiki Schema — Reading a Book
@@ -305,8 +305,8 @@ ${BASE_CONTRADICTION}
 
 const personalTemplate: WikiTemplate = {
   id: "personal",
-  name: "Personal Growth",
-  description: "Track goals, habits, reflections, and journal entries for self-improvement",
+  name: "个人成长",
+  description: "追踪目标、习惯、反思和日记，助力自我提升",
   icon: "🌱",
   extraDirs: ["wiki/goals", "wiki/habits", "wiki/reflections", "wiki/journal"],
   schema: `# Wiki Schema — Personal Growth
@@ -433,8 +433,8 @@ ${BASE_CONTRADICTION}
 
 const businessTemplate: WikiTemplate = {
   id: "business",
-  name: "Business",
-  description: "Manage meetings, decisions, projects, and stakeholder context for a team",
+  name: "商业/团队",
+  description: "管理会议、决策、项目和利益相关者信息",
   icon: "💼",
   extraDirs: ["wiki/meetings", "wiki/decisions", "wiki/projects", "wiki/stakeholders"],
   schema: `# Wiki Schema — Business / Team
@@ -571,8 +571,8 @@ ${BASE_CONTRADICTION}
 
 const generalTemplate: WikiTemplate = {
   id: "general",
-  name: "General",
-  description: "Minimal setup — a blank slate for any purpose",
+  name: "通用",
+  description: "最小化配置，适用于任何用途",
   icon: "📄",
   extraDirs: [],
   schema: `# Wiki Schema

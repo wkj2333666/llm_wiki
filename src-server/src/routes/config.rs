@@ -6,6 +6,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::AppState;
+use crate::db;
 use crate::types::WikiProject;
 
 #[derive(Deserialize)]
@@ -13,12 +14,16 @@ pub struct GetConfigQuery {
     key: String,
 }
 
-/// Get config value by key (uses query parameter, not JSON body)
+/// Get config value by key
 pub async fn get_config(
+    State(state): State<AppState>,
     Query(query): Query<GetConfigQuery>,
 ) -> Result<Json<Value>, String> {
-    // TODO: implement using db::get_config
-    Ok(Json(Value::Null))
+    let value: Option<Value> = db::get_config::<Value>(&state.db, &query.key)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(Json(value.unwrap_or(Value::Null)))
 }
 
 #[derive(Deserialize)]
@@ -29,16 +34,25 @@ pub struct SetConfigBody {
 
 /// Set config value
 pub async fn set_config(
-    Json(_body): Json<SetConfigBody>,
+    State(state): State<AppState>,
+    Json(body): Json<SetConfigBody>,
 ) -> Result<(), String> {
-    // TODO: implement using db::set_config
+    db::set_config(&state.db, &body.key, &body.value)
+        .await
+        .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
-/// Get recent projects
-pub async fn get_projects() -> Result<Json<Vec<WikiProject>>, String> {
-    // TODO: implement using db::get_projects
-    Ok(Json(Vec::new()))
+/// Get recent projects from database
+pub async fn get_projects(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<WikiProject>>, String> {
+    let projects = db::get_projects(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(Json(projects))
 }
 
 #[derive(Deserialize)]
@@ -48,9 +62,13 @@ pub struct AddProjectBody {
 
 /// Add project to recent list
 pub async fn add_project(
-    Json(_body): Json<AddProjectBody>,
+    State(state): State<AppState>,
+    Json(body): Json<AddProjectBody>,
 ) -> Result<(), String> {
-    // TODO: implement using db::add_to_recent_projects
+    db::add_to_recent_projects(&state.db, &body.project)
+        .await
+        .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
@@ -61,9 +79,13 @@ pub struct RemoveProjectBody {
 
 /// Remove project from recent list
 pub async fn remove_project(
-    Json(_body): Json<RemoveProjectBody>,
+    State(state): State<AppState>,
+    Json(body): Json<RemoveProjectBody>,
 ) -> Result<(), String> {
-    // TODO: implement using db::remove_project
+    db::remove_project(&state.db, &body.path)
+        .await
+        .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
@@ -82,4 +104,15 @@ pub async fn get_server_config(
             "apiKey": config.search.api_key,
         },
     })))
+}
+
+/// Get last opened project (full WikiProject if exists in database)
+pub async fn get_last_project(
+    State(state): State<AppState>,
+) -> Result<Json<Option<WikiProject>>, String> {
+    let project = db::get_last_project(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(Json(project))
 }

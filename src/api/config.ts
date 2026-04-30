@@ -17,6 +17,10 @@ export async function getProjects(): Promise<WikiProject[]> {
   return apiGet<WikiProject[]>('/config/projects');
 }
 
+export async function getLastProject(): Promise<WikiProject | null> {
+  return apiGet<WikiProject | null>('/config/last-project');
+}
+
 export async function addProject(project: WikiProject): Promise<void> {
   await apiPost('/config/projects/add', { project });
 }

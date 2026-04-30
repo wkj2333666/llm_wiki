@@ -1,5 +1,5 @@
 // Config storage - now uses HTTP API instead of tauri-plugin-store
-import { getConfig, setConfig } from "@/api/config"
+import { getConfig, setConfig, getLastProject as apiGetLastProject } from "@/api/config"
 import type { WikiProject } from "@/types/wiki"
 import type { LlmConfig, SearchApiConfig, EmbeddingConfig, MultimodalConfig, OutputLanguage, ProviderConfigs } from "@/stores/wiki-store"
 
@@ -12,8 +12,7 @@ export async function getRecentProjects(): Promise<WikiProject[]> {
 }
 
 export async function getLastProject(): Promise<WikiProject | null> {
-  const project = await getConfig(LAST_PROJECT_KEY)
-  return (project as WikiProject) ?? null
+  return apiGetLastProject()
 }
 
 export async function saveLastProject(project: WikiProject): Promise<void> {

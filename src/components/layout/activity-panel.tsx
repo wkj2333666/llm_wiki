@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react"
+import { useTranslation } from "react-i18next"
 import {
   ChevronUp, ChevronDown, Loader2, CheckCircle2, AlertCircle,
   FileText, Users, Lightbulb, BookOpen, GitMerge, BarChart3, HelpCircle, Layout,
@@ -30,6 +31,7 @@ function getFileTypeInfo(path: string): { icon: typeof FileText; type: string } 
 }
 
 export function ActivityPanel() {
+  const { t } = useTranslation()
   const items = useActivityStore((s) => s.items)
   const clearDone = useActivityStore((s) => s.clearDone)
   const project = useWikiStore((s) => s.project)
@@ -72,9 +74,8 @@ export function ActivityPanel() {
     const activeCount = queueSummary.pending + queueSummary.processing
     if (activeCount === 0) return
     if (!window.confirm(
-      `Cancel all ${activeCount} queued/processing task${activeCount > 1 ? "s" : ""}? ` +
-      `Partial files from the in-progress task will be removed. ` +
-      `Failed tasks will be kept so you can retry them.`,
+      t("activity.cancelAllConfirm", { count: activeCount }) +
+      t("activity.cancelAllWarning", "进行中的任务生成的部分文件将被删除。失败的任务会保留以便重试。"),
     )) return
     cancelAllTasks()
   }, [project, queueSummary.pending, queueSummary.processing])
@@ -98,14 +99,14 @@ export function ActivityPanel() {
   let statusText = ""
   if (queueSummary.processing > 0 || queueSummary.pending > 0) {
     const done = queueSummary.total - queueSummary.pending - queueSummary.processing
-    statusText = `Queue: ${done}/${queueSummary.total}`
-    if (queueSummary.failed > 0) statusText += ` (${queueSummary.failed} failed)`
+    statusText = t("activity.queueProgress", { done, total: queueSummary.total })
+    if (queueSummary.failed > 0) statusText += t("activity.failedCount", { count: queueSummary.failed })
   } else if (runningCount > 0) {
-    statusText = `Processing: ${latestItem?.title ?? "..."}`
+    statusText = t("activity.processing", { title: latestItem?.title ?? "..." })
   } else if (queueSummary.failed > 0) {
-    statusText = `${queueSummary.failed} failed task${queueSummary.failed > 1 ? "s" : ""}`
+    statusText = t("activity.failedTasks", { count: queueSummary.failed })
   } else {
-    statusText = `Done: ${latestItem?.title ?? "All tasks complete"}`
+    statusText = t("activity.done", { title: latestItem?.title ?? t("activity.allComplete", "全部完成") })
   }
 
   const isActive = runningCount > 0 || queueSummary.processing > 0 || queueSummary.pending > 0
@@ -137,17 +138,17 @@ export function ActivityPanel() {
           {hasQueue && (queueSummary.processing > 0 || queueSummary.pending > 0) && (
             <div className="px-3 py-1.5 border-b border-border/50">
               <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1 gap-2">
-                <span>Ingest Queue</span>
+                <span>{t("activity.ingestQueue", "导入队列")}</span>
                 <span className="flex-1 text-right">
-                  {queueSummary.total - queueSummary.pending - queueSummary.processing}/{queueSummary.total} complete
+                  {t("activity.queueComplete", { done: queueSummary.total - queueSummary.pending - queueSummary.processing, total: queueSummary.total })}
                 </span>
                 {queueSummary.pending + queueSummary.processing >= 2 && (
                   <button
                     onClick={handleCancelAll}
                     className="rounded px-1.5 py-0.5 text-[10px] text-destructive hover:bg-destructive/10"
-                    title="Cancel all queued and in-progress tasks"
+                    title={t("activity.cancelAllTitle", "取消所有排队和进行中的任务")}
                   >
-                    Cancel all
+                    {t("activity.cancelAll", "全部取消")}
                   </button>
                 )}
               </div>
@@ -190,7 +191,7 @@ export function ActivityPanel() {
               onClick={clearDone}
               className="w-full px-3 py-1 text-center text-[10px] text-muted-foreground hover:underline"
             >
-              Clear completed
+              {t("activity.clearCompleted")}
             </button>
           )}
         </div>
@@ -200,6 +201,7 @@ export function ActivityPanel() {
 }
 
 function QueueRow({ task, onRetry, onCancel }: { task: IngestTask; onRetry: (id: string) => void; onCancel: (id: string) => void }) {
+  const { t } = useTranslation()
   const fileName = getFileName(task.sourcePath)
 
   return (
@@ -224,7 +226,7 @@ function QueueRow({ task, onRetry, onCancel }: { task: IngestTask; onRetry: (id:
             <button
               onClick={() => onRetry(task.id)}
               className="p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
-              title="Retry"
+              title={t("activity.retry", "重试")}
             >
               <RotateCcw className="h-3 w-3" />
             </button>
@@ -233,7 +235,7 @@ function QueueRow({ task, onRetry, onCancel }: { task: IngestTask; onRetry: (id:
             <button
               onClick={() => onCancel(task.id)}
               className="p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
-              title="Cancel"
+              title={t("activity.cancel", "取消")}
             >
               <X className="h-3 w-3" />
             </button>
@@ -245,6 +247,7 @@ function QueueRow({ task, onRetry, onCancel }: { task: IngestTask; onRetry: (id:
 }
 
 function ActivityRow({ item, onCancel }: { item: ActivityItem; onCancel?: () => void }) {
+  const { t } = useTranslation()
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const project = useWikiStore((s) => s.project)
 
@@ -273,7 +276,7 @@ function ActivityRow({ item, onCancel }: { item: ActivityItem; onCancel?: () => 
           <button
             onClick={onCancel}
             className="shrink-0 p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
-            title="Cancel"
+            title={t("activity.cancel", "取消")}
           >
             <X className="h-3 w-3" />
           </button>

@@ -177,13 +177,22 @@ impl AppConfig {
 
     /// Get LLM config as JSON for frontend
     pub fn llm_config_json(&self) -> serde_json::Value {
+        // Determine provider type based on URL
+        // If URL is not the default OpenAI URL, treat as custom endpoint
+        let is_default_openai = self.llm.url == "https://api.openai.com/v1";
+        let effective_provider = if self.llm.provider == "openai" && !is_default_openai {
+            "custom"  // Custom OpenAI-compatible endpoint
+        } else {
+            &self.llm.provider
+        };
+
         serde_json::json!({
-            "provider": self.llm.provider,
+            "provider": effective_provider,
             "apiKey": self.llm.api_key,
             "model": self.llm.model,
             "maxContextSize": self.llm.max_context_size,
             "ollamaUrl": if self.llm.provider == "ollama" { self.llm.url.clone() } else { "".to_string() },
-            "customEndpoint": if self.llm.provider == "custom" { self.llm.url.clone() } else { "".to_string() },
+            "customEndpoint": if effective_provider == "custom" || self.llm.provider == "custom" { self.llm.url.clone() } else { "".to_string() },
             "apiMode": self.llm.api_mode,
         })
     }

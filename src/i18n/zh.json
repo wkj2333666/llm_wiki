@@ -13,7 +13,8 @@
     "settings": "设置",
     "switchProject": "切换项目",
     "updateAvailable": "有可用更新",
-    "updateAvailableSuffix": " · 有更新"
+    "updateAvailableSuffix": " · 有更新",
+    "deepResearch": "深度研究"
   },
   "updateBanner": {
     "message": "新版本 {{version}} 已发布",
@@ -48,11 +49,20 @@
     "noSources": "暂无资料",
     "importHint": "导入文档，开始构建你的 Wiki",
     "importFiles": "导入文件",
+    "importFolder": "导入文件夹",
     "ingest": "提取到 Wiki",
+    "refresh": "刷新",
     "delete": "删除资料及相关 Wiki 页面",
     "deleteConfirm": "删除「{{name}}」及其相关 Wiki 页面？\n\n此操作将：\n- 删除原始资料文件\n- 删除由该资料生成的 Wiki 页面\n- 更新 index.md",
     "sourceCount": "{{count}} 个资料",
-    "sourceCount_plural": "{{count}} 个资料"
+    "sourceCount_plural": "{{count}} 个资料",
+    "clickAgainToDelete": "再次点击删除 {{name}}",
+    "deleteWithName": "删除 {{name}}",
+    "confirm": "确认"
+  },
+  "sidebar": {
+    "knowledge": "知识库",
+    "files": "文件"
   },
   "chat": {
     "placeholder": "向你的 Wiki 提问...",
@@ -87,7 +97,22 @@
   "review": {
     "title": "待审阅",
     "clearResolved": "清除已解决",
-    "allClear": "一切正常，无需审阅"
+    "allClear": "一切正常，无需审阅",
+    "possibleDuplicate": "可能重复",
+    "needsConfirmation": "需要确认",
+    "queuedForResearch": "已加入研究队列",
+    "queuedForDeepResearch": "已加入深度研究队列",
+    "savedQuery": "已保存的查询",
+    "savedToWiki": "已保存到 Wiki",
+    "saveFailed": "保存失败",
+    "deleted": "已删除",
+    "deleteFailed": "删除失败",
+    "untitled": "无标题",
+    "createFailed": "创建失败",
+    "searchApiRequired": "网页搜索未配置。请先在 设置 → 网页搜索 中配置 API。",
+    "pages": "页面",
+    "deepResearch": "深度研究",
+    "resolved": "已解决"
   },
   "settings": {
     "title": "设置",
@@ -232,7 +257,25 @@
   "activity": {
     "processing": "处理中：{{title}}",
     "done": "已完成：{{title}}",
-    "clearCompleted": "清除已完成"
+    "clearCompleted": "清除已完成",
+    "ingestQueue": "导入队列",
+    "queueProgress": "队列: {{done}}/{{total}}",
+    "queueComplete": "{{done}}/{{total}} 完成",
+    "failedCount": "（{{count}} 个失败）",
+    "failedTasks": "{{count}} 个失败任务",
+    "allComplete": "全部完成",
+    "cancelAll": "全部取消",
+    "cancelAllTitle": "取消所有排队和进行中的任务",
+    "cancelAllConfirm": "取消所有 {{count}} 个排队/进行中的任务？",
+    "cancelAllWarning": "进行中的任务生成的部分文件将被删除。失败的任务会保留以便重试。",
+    "retry": "重试",
+    "cancel": "取消"
+  },
+  "clipServer": {
+    "running": "Clip 服务运行中",
+    "starting": "Clip 服务启动中...",
+    "portConflict": "端口 19827 被占用，网页剪藏不可用",
+    "error": "Clip 服务出错，正在重启..."
   },
   "fileTree": {
     "noProject": "未打开项目"

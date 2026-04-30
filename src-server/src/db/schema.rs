@@ -11,20 +11,20 @@ CREATE TABLE IF NOT EXISTS projects (
     name TEXT NOT NULL,
     path TEXT NOT NULL UNIQUE,
     created_at INTEGER NOT NULL,
-    last_opened_at INTEGER
+    last_opened_at INTEGER NOT NULL
 );
 
 -- Initialize default config keys
 INSERT OR IGNORE INTO app_config (key, value) VALUES
     ('recent_projects', '[]'),
-    ('last_project', '{}'),
+    ('last_project', 'null'),
     ('llm_config', '{}'),
     ('provider_configs', '{}'),
     ('active_preset_id', 'null'),
     ('search_api_config', '{}'),
     ('embedding_config', '{}'),
     ('multimodal_config', '{}'),
-    ('language', 'en'),
-    ('output_language', 'auto'),
+    ('language', 'zh'),
+    ('output_language', 'Chinese'),
     ('update_check_state', '{"enabled":true,"lastCheckedAt":null,"dismissedVersion":null}');
 "#;

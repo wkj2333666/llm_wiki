@@ -113,7 +113,7 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
                 </span>
               )}
             </TooltipTrigger>
-            <TooltipContent side="right">Deep Research</TooltipContent>
+            <TooltipContent side="right">{t("nav.deepResearch", "深度研究")}</TooltipContent>
           </Tooltip>
         </div>
         {/* Bottom: daemon status + settings + switch project */}
@@ -131,10 +131,10 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
               />
             </TooltipTrigger>
             <TooltipContent side="right">
-              {daemonStatus === "running" && "Clip server running"}
-              {daemonStatus === "starting" && "Clip server starting..."}
-              {daemonStatus === "port_conflict" && "Port 19827 is occupied. Web Clipper unavailable."}
-              {daemonStatus === "error" && "Clip server error. Restarting..."}
+              {daemonStatus === "running" && t("clipServer.running", "Clip 服务运行中")}
+              {daemonStatus === "starting" && t("clipServer.starting", "Clip 服务启动中...")}
+              {daemonStatus === "port_conflict" && t("clipServer.portConflict", "端口 19827 被占用，网页剪藏不可用")}
+              {daemonStatus === "error" && t("clipServer.error", "Clip 服务出错，正在重启...")}
             </TooltipContent>
           </Tooltip>
           <Tooltip>

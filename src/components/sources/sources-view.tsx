@@ -441,7 +441,7 @@ export function SourcesView() {
       <div className="flex items-center justify-between border-b px-4 py-3">
         <h2 className="text-sm font-semibold">{t("sources.title")}</h2>
         <div className="flex gap-1">
-          <Button variant="ghost" size="icon" onClick={loadSources} title="Refresh">
+          <Button variant="ghost" size="icon" onClick={loadSources} title={t("sources.refresh", "刷新")}>
             <RefreshCw className="h-4 w-4" />
           </Button>
           <Button size="sm" onClick={handleImport} disabled={importing}>
@@ -467,7 +467,7 @@ export function SourcesView() {
               </Button>
               <Button variant="outline" size="sm" onClick={handleImportFolder}>
                 <Plus className="mr-1 h-4 w-4" />
-                Folder
+                {t("sources.importFolder", "文件夹")}
               </Button>
             </div>
           </div>
@@ -579,15 +579,12 @@ function SourceTree({
   onIngest: (node: FileNode) => void
   onDelete: (node: FileNode) => void
   onDeleteFolder: (node: FileNode) => void
-  /** Path of the node currently in "click again to confirm" state.
-   *  Lifted to the parent so only ONE button is armed at a time
-   *  across the whole tree — clicking another delete arms that one
-   *  and disarms the previous. */
   pendingDeletePath: string | null
   setPendingDeletePath: (path: string | null) => void
   ingestingPath: string | null
   depth: number
 }) {
+  const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
 
   const toggle = (path: string) => {
@@ -695,7 +692,7 @@ function SourceTree({
               variant="ghost"
               size="icon"
               className="h-7 w-7 shrink-0"
-              title="Ingest"
+              title={t("sources.ingest")}
               disabled={ingestingPath === node.path}
               onClick={() => onIngest(node)}
             >
@@ -706,8 +703,8 @@ function SourceTree({
               onClick={() => handleDeleteClick(node)}
               hint={
                 isPendingDelete
-                  ? `Click again to delete ${node.name}`
-                  : `Delete ${node.name}`
+                  ? t("sources.clickAgainToDelete", { name: node.name })
+                  : t("sources.deleteWithName", { name: node.name })
               }
             />
           </div>
@@ -736,6 +733,7 @@ function DeleteButton({
   onClick: () => void
   hint: string
 }) {
+  const { t } = useTranslation()
   if (isPending) {
     return (
       <Button
@@ -746,7 +744,7 @@ function DeleteButton({
         onClick={onClick}
       >
         <Trash2 className="mr-1 h-3.5 w-3.5" />
-        Confirm
+        {t("sources.confirm", "确认")}
       </Button>
     )
   }

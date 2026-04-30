@@ -1,12 +1,13 @@
 #!/bin/bash
-# LLM Wiki Web Server Startup Script
+# LLM Wiki Web Server Startup Script (Release mode)
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Get project root directory (scripts/ is one level below root)
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Default config file path
-CONFIG_FILE="${LLM_WIKI_CONFIG:-$SCRIPT_DIR/server.toml}"
+CONFIG_FILE="${LLM_WIKI_CONFIG:-$PROJECT_ROOT/server.toml}"
 
 # Check if config file exists
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -17,9 +18,10 @@ if [ ! -f "$CONFIG_FILE" ]; then
 
 [server]
 port = 3000
-token = "your-secret-token"
+token = ""
 data_dir = "~/.llm-wiki-server"
 static_dir = "dist-server/public"
+projects_dir = "~/wiki-projects"
 
 [llm]
 provider = "openai"
@@ -36,8 +38,8 @@ api_key = ""
 model = "text-embedding-3-small"
 
 [search]
-enabled = false
-provider = "google"
+enabled = true
+provider = "duckduckgo"
 api_key = ""
 EOF
     echo "Created default config. Edit $CONFIG_FILE to configure your LLM provider."
@@ -48,8 +50,8 @@ export LLM_WIKI_CONFIG="$CONFIG_FILE"
 
 echo "LLM Wiki Web Server (Release)"
 echo "  Config file:    $CONFIG_FILE"
-echo "  Server binary:  $SCRIPT_DIR/src-server/target/release/llm-wiki-server"
+echo "  Server binary:  $PROJECT_ROOT/src-server/target/release/llm-wiki-server"
 echo ""
 
 # Start the server
-exec "$SCRIPT_DIR/src-server/target/release/llm-wiki-server"
+exec "$PROJECT_ROOT/src-server/target/release/llm-wiki-server"

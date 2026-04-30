@@ -3,12 +3,13 @@
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Get project root directory (scripts/ is one level below root)
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Check if debug server binary exists, build if not
-if [ ! -f "$SCRIPT_DIR/src-server/target/debug/llm-wiki-server" ]; then
+if [ ! -f "$PROJECT_ROOT/src-server/target/debug/llm-wiki-server" ]; then
     echo "Debug server not found, building..."
-    cd "$SCRIPT_DIR/src-server" && cargo build
+    cd "$PROJECT_ROOT/src-server" && cargo build
 fi
 
 echo "Starting LLM Wiki Development Mode"
@@ -20,8 +21,8 @@ echo ""
 trap 'kill $(jobs -p) 2>/dev/null' EXIT
 
 # Start backend in background
-export LLM_WIKI_CONFIG="${LLM_WIKI_CONFIG:-$SCRIPT_DIR/server.toml}"
-"$SCRIPT_DIR/src-server/target/debug/llm-wiki-server" &
+export LLM_WIKI_CONFIG="${LLM_WIKI_CONFIG:-$PROJECT_ROOT/server.toml}"
+"$PROJECT_ROOT/src-server/target/debug/llm-wiki-server" &
 echo "Backend started (PID: $!)"
 
 # Wait a moment for backend to start
@@ -29,5 +30,5 @@ sleep 1
 
 # Start frontend (this will run in foreground)
 echo "Starting frontend..."
-cd "$SCRIPT_DIR"
+cd "$PROJECT_ROOT"
 npm run dev

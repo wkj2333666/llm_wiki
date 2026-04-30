@@ -6,6 +6,7 @@ mod routes;
 mod services;
 mod types;
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -13,6 +14,8 @@ use axum::{
     routing::{get, post, delete},
     Router,
 };
+use tokio::process::Child;
+use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
@@ -20,10 +23,17 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::AppConfig;
 
+/// Shared state holding running Claude child processes keyed by stream_id
+#[derive(Default, Clone)]
+pub struct ClaudeProcessState {
+    children: Arc<Mutex<HashMap<String, Child>>>,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub db: sqlx::SqlitePool,
     pub config: Arc<AppConfig>,
+    pub claude_processes: ClaudeProcessState,
 }
 
 #[tokio::main]
@@ -63,6 +73,7 @@ async fn main() {
     let state = AppState {
         db,
         config: Arc::new(config.clone()),
+        claude_processes: ClaudeProcessState::default(),
     };
 
     // Build router with auth layer
@@ -100,6 +111,7 @@ async fn main() {
         .route("/config/projects", get(routes::config::get_projects))
         .route("/config/projects/add", post(routes::config::add_project))
         .route("/config/projects/remove", delete(routes::config::remove_project))
+        .route("/config/last-project", get(routes::config::get_last_project))
         // Server config (for frontend)
         .route("/config/server", get(routes::config::get_server_config))
         // Wiki related pages
