@@ -1,6 +1,7 @@
 // Services module - will contain the actual business logic
 // migrated from src-tauri/src/commands/
 
+pub mod extract_images;
 pub mod fs;
 pub mod project;
 pub mod vector;

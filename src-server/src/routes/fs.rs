@@ -1,5 +1,6 @@
 use axum::{
     extract::Query,
+    extract::Multipart,
     Json,
     response::Response,
     body::Body,
@@ -22,9 +23,7 @@ pub struct ReadFileResponse {
 pub async fn read_file(
     Query(query): Query<ReadFileQuery>,
 ) -> Result<Json<ReadFileResponse>, String> {
-    // TODO: implement using services::fs::read_file
-    let content = std::fs::read_to_string(&query.path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = crate::services::fs::read_file(query.path).await?;
     Ok(Json(ReadFileResponse { content }))
 }
 
@@ -38,10 +37,7 @@ pub struct WriteFileBody {
 pub async fn write_file(
     Json(body): Json<WriteFileBody>,
 ) -> Result<(), String> {
-    // TODO: implement using services::fs::write_file
-    std::fs::write(&body.path, &body.content)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
-    Ok(())
+    crate::services::fs::write_file(body.path, body.content).await
 }
 
 #[derive(Deserialize)]
@@ -53,26 +49,7 @@ pub struct ListDirectoryQuery {
 pub async fn list_directory(
     Query(query): Query<ListDirectoryQuery>,
 ) -> Result<Json<Vec<FileNode>>, String> {
-    // TODO: implement using services::fs::list_directory
-    let mut nodes = Vec::new();
-    let entries = std::fs::read_dir(&query.path)
-        .map_err(|e| format!("Failed to read directory: {}", e))?;
-
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-        let is_dir = path.is_dir();
-
-        nodes.push(FileNode {
-            name,
-            path: path.to_string_lossy().to_string(),
-            is_dir,
-            children: None,
-        });
-    }
-
-    Ok(Json(nodes))
+    crate::services::fs::list_directory(query.path).await.map(Json)
 }
 
 #[derive(Deserialize)]
@@ -85,10 +62,7 @@ pub struct CopyFileBody {
 pub async fn copy_file(
     Json(body): Json<CopyFileBody>,
 ) -> Result<(), String> {
-    // TODO: implement using services::fs::copy_file
-    std::fs::copy(&body.source, &body.destination)
-        .map_err(|e| format!("Failed to copy file: {}", e))?;
-    Ok(())
+    crate::services::fs::copy_file(body.source, body.destination).await
 }
 
 #[derive(Deserialize)]
@@ -101,13 +75,7 @@ pub struct CopyDirectoryBody {
 pub async fn copy_directory(
     Json(body): Json<CopyDirectoryBody>,
 ) -> Result<Json<Vec<String>>, String> {
-    // TODO: implement using services::fs::copy_directory
-    let mut copied = Vec::new();
-    // Simplified implementation - just copy the directory
-    fs_extra::copy_items(&[&body.source], &body.destination, &fs_extra::dir::CopyOptions::new())
-        .map_err(|e| format!("Failed to copy directory: {}", e))?;
-    copied.push(body.destination);
-    Ok(Json(copied))
+    crate::services::fs::copy_directory(body.source, body.destination).await.map(Json)
 }
 
 #[derive(Deserialize)]
@@ -117,10 +85,9 @@ pub struct PreprocessFileBody {
 
 /// Preprocess file and cache extracted text
 pub async fn preprocess_file(
-    Json(_body): Json<PreprocessFileBody>,
+    Json(body): Json<PreprocessFileBody>,
 ) -> Result<Json<String>, String> {
-    // TODO: implement using services::fs::preprocess_file
-    Ok(Json("no preprocessing needed".to_string()))
+    crate::services::fs::preprocess_file(body.path).await.map(Json)
 }
 
 #[derive(Deserialize)]
@@ -132,16 +99,7 @@ pub struct DeleteFileBody {
 pub async fn delete_file(
     Json(body): Json<DeleteFileBody>,
 ) -> Result<(), String> {
-    // TODO: implement using services::fs::delete_file
-    let path = std::path::Path::new(&body.path);
-    if path.is_dir() {
-        std::fs::remove_dir_all(path)
-            .map_err(|e| format!("Failed to remove directory: {}", e))?;
-    } else {
-        std::fs::remove_file(path)
-            .map_err(|e| format!("Failed to remove file: {}", e))?;
-    }
-    Ok(())
+    crate::services::fs::delete_file(body.path).await
 }
 
 #[derive(Deserialize)]
@@ -153,10 +111,7 @@ pub struct CreateDirectoryBody {
 pub async fn create_directory(
     Json(body): Json<CreateDirectoryBody>,
 ) -> Result<(), String> {
-    // TODO: implement using services::fs::create_directory
-    std::fs::create_dir_all(&body.path)
-        .map_err(|e| format!("Failed to create directory: {}", e))?;
-    Ok(())
+    crate::services::fs::create_directory(body.path).await
 }
 
 #[derive(Deserialize)]
@@ -168,8 +123,7 @@ pub struct FileExistsQuery {
 pub async fn file_exists(
     Query(query): Query<FileExistsQuery>,
 ) -> Result<Json<bool>, String> {
-    // TODO: implement using services::fs::file_exists
-    Ok(Json(std::path::Path::new(&query.path).exists()))
+    crate::services::fs::file_exists(query.path).await.map(Json)
 }
 
 #[derive(Deserialize)]
@@ -177,27 +131,11 @@ pub struct ReadFileBase64Query {
     path: String,
 }
 
-#[derive(Serialize)]
-pub struct FileBase64 {
-    base64: String,
-    mime_type: String,
-}
-
 /// Read file as base64 with mime type
 pub async fn read_file_as_base64(
     Query(query): Query<ReadFileBase64Query>,
-) -> Result<Json<FileBase64>, String> {
-    // TODO: implement using services::fs::read_file_as_base64
-    let content = std::fs::read(&query.path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-    let base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &content);
-
-    // Guess mime type from extension
-    let mime_type = mime_guess::from_path(&query.path)
-        .first_or_octet_stream()
-        .to_string();
-
-    Ok(Json(FileBase64 { base64, mime_type }))
+) -> Result<Json<crate::services::fs::FileBase64>, String> {
+    crate::services::fs::read_file_as_base64(query.path).await.map(Json)
 }
 
 #[derive(Deserialize)]
@@ -209,13 +147,13 @@ pub struct ServeFileQuery {
 pub async fn serve_file(
     Query(query): Query<ServeFileQuery>,
 ) -> Result<Response, String> {
-    let path = std::path::Path::new(&query.path);
-    if !path.exists() {
-        return Err("File not found".to_string());
-    }
-
-    let content = std::fs::read(path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let path = query.path.clone();
+    let content = tokio::task::spawn_blocking(move || {
+        std::fs::read(&path)
+            .map_err(|e| format!("Failed to read file '{}': {}", path, e))
+    })
+    .await
+    .map_err(|e| format!("serve_file blocking task join error: {e}"))??;
 
     let mime_type = mime_guess::from_path(&query.path)
         .first_or_octet_stream()
@@ -237,30 +175,150 @@ pub struct ExtractImagesBody {
     is_pdf: bool,
 }
 
-#[derive(Serialize)]
-pub struct SavedImage {
-    index: i32,
-    mime_type: String,
-    page: Option<i32>,
-    width: i32,
-    height: i32,
-    #[serde(rename = "relPath")]
-    rel_path: String,
-    #[serde(rename = "absPath")]
-    abs_path: String,
-    sha256: String,
-}
-
 /// Extract images from PDF or Office documents
 pub async fn extract_images(
     Json(body): Json<ExtractImagesBody>,
-) -> Result<Json<Vec<SavedImage>>, String> {
-    // TODO: Implement actual image extraction using pdfium-render or calamine
-    // For now, return empty array as placeholder
-    // The full implementation would mirror src-tauri/src/commands/extract_images.rs
-    tracing::warn!(
-        "Image extraction requested for {} but not yet implemented",
-        body.source_path
-    );
-    Ok(Json(Vec::new()))
+) -> Result<Json<Vec<crate::services::extract_images::SavedImage>>, String> {
+    if body.is_pdf {
+        crate::services::extract_images::extract_and_save_pdf_images_cmd(
+            body.source_path, body.dest_dir, body.rel_to,
+        )
+        .await
+        .map(Json)
+    } else {
+        crate::services::extract_images::extract_and_save_office_images_cmd(
+            body.source_path, body.dest_dir, body.rel_to,
+        )
+        .await
+        .map(Json)
+    }
+}
+
+#[derive(Serialize)]
+pub struct UploadedFile {
+    name: String,
+    path: String,
+    size: u64,
+}
+
+/// Upload files via multipart/form-data.
+///
+/// The form must include a `destination` text field (the target directory
+/// on the server, e.g. project path + `/raw/sources`) and one or more
+/// file fields. Each file's original filename is preserved; if a file
+/// with the same name already exists in the destination, a date suffix
+/// is appended (e.g. `file-20260506.pdf`).
+///
+/// For folder uploads, the browser sends each file with its relative
+/// path via the `webkitRelativePath` field — we reconstruct the
+/// directory tree under the destination.
+pub async fn upload_files(
+    mut multipart: Multipart,
+) -> Result<Json<Vec<UploadedFile>>, String> {
+    let mut destination = String::new();
+    let mut uploaded = Vec::new();
+
+    // First pass: extract the destination field
+    while let Some(field) = multipart.next_field().await.map_err(|e| format!("Multipart error: {}", e))? {
+        let name = field.name().unwrap_or("").to_string();
+
+        if name == "destination" {
+            destination = field.text().await.map_err(|e| format!("Failed to read destination: {}", e))?;
+            continue;
+        }
+
+        // It's a file field — save it
+        let file_name = field.file_name().unwrap_or("unknown").to_string();
+        let data = field.bytes().await.map_err(|e| format!("Failed to read file data: {}", e))?;
+        let size = data.len() as u64;
+
+        if destination.is_empty() {
+            return Err("Missing 'destination' field in multipart upload".to_string());
+        }
+
+        // Check for relative path (folder upload via webkitdirectory)
+        // axum multipart doesn't expose webkitRelativePath directly,
+        // so we use a custom field name "relativePath" sent alongside each file.
+        // If not present, we use just the filename (flat upload).
+
+        // Ensure destination directory exists
+        let (dest_dir, base_name) = if !file_name.contains('/') && !file_name.contains('\\') {
+            // Flat file — save directly to destination
+            (destination.clone(), file_name.clone())
+        } else {
+            // Folder upload: file_name contains relative path like "myfolder/sub/file.pdf"
+            // Split into parent dirs and the actual filename
+            let last_sep = file_name.rfind(|c: char| c == '/' || c == '\\');
+            let (parent, base) = match last_sep {
+                Some(idx) if idx > 0 => (&file_name[..idx], &file_name[idx + 1..]),
+                _ => ("", file_name.as_str()),
+            };
+            let sub_dir = if parent.is_empty() {
+                destination.clone()
+            } else {
+                format!("{}/{}", destination, parent)
+            };
+            std::fs::create_dir_all(&sub_dir)
+                .map_err(|e| format!("Failed to create subdirectory {}: {}", sub_dir, e))?;
+            (sub_dir, base.to_string())
+        };
+
+        // Build target path with deduplication
+        let target_path = dedup_path(&dest_dir, &base_name);
+
+        // Ensure parent directory exists
+        if let Some(parent) = std::path::Path::new(&target_path).parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create directory: {}", e))?;
+        }
+
+        // Write file
+        std::fs::write(&target_path, &data)
+            .map_err(|e| format!("Failed to write file {}: {}", target_path, e))?;
+
+        uploaded.push(UploadedFile {
+            name: base_name,
+            path: target_path,
+            size,
+        });
+    }
+
+    tracing::info!("Uploaded {} files to {}", uploaded.len(), destination);
+    Ok(Json(uploaded))
+}
+
+/// If the file already exists at the destination, append a date suffix.
+/// If that also exists, add a counter.
+fn dedup_path(dir: &str, filename: &str) -> String {
+    let base = format!("{}/{}", dir, filename);
+    if !std::path::Path::new(&base).exists() {
+        return base;
+    }
+
+    let ext = if filename.contains('.') {
+        filename.rfind('.').map(|i| &filename[i..]).unwrap_or("")
+    } else {
+        ""
+    };
+    let name_without_ext = if ext.is_empty() {
+        filename.to_string()
+    } else {
+        filename[..filename.len() - ext.len()].to_string()
+    };
+    let date = chrono::Local::now().format("%Y%m%d").to_string();
+
+    let with_date = format!("{}/{}-{}{}", dir, name_without_ext, date, ext);
+    if !std::path::Path::new(&with_date).exists() {
+        return with_date;
+    }
+
+    for i in 2..100 {
+        let with_counter = format!("{}/{}-{}-{}{}", dir, name_without_ext, date, i, ext);
+        if !std::path::Path::new(&with_counter).exists() {
+            return with_counter;
+        }
+    }
+
+    format!("{}/{}-{}-{}{}", dir, name_without_ext, date, std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH).unwrap().as_millis(), ext)
 }

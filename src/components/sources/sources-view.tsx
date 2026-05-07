@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react"
-import { Plus, FileText, RefreshCw, BookOpen, Trash2, Folder, ChevronRight, ChevronDown } from "lucide-react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { FileText, RefreshCw, BookOpen, Trash2, Folder, ChevronRight, ChevronDown, Upload, FolderUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useWikiStore } from "@/stores/wiki-store"
-import { copyFile, copyDirectory, listDirectory, readFile, writeFile, deleteFile, findRelatedWikiPages, preprocessFile } from "@/commands/fs"
+import { listDirectory, readFile, writeFile, deleteFile, findRelatedWikiPages, preprocessFile } from "@/commands/fs"
+import { uploadFiles } from "@/api/fs"
 import type { FileNode } from "@/types/wiki"
 import { enqueueIngest, enqueueBatch } from "@/lib/ingest-queue"
 import { hasUsableLlm } from "@/lib/has-usable-llm"
@@ -24,6 +25,8 @@ import {
   decideDeleteClick,
 } from "@/lib/sources-tree-delete"
 
+const INGESTABLE_EXTS = ["md", "mdx", "txt", "pdf", "docx", "pptx", "xlsx", "xls", "csv", "json", "html", "htm", "rtf", "xml", "yaml", "yml"]
+
 export function SourcesView() {
   const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
@@ -35,6 +38,8 @@ export function SourcesView() {
   const [sources, setSources] = useState<FileNode[]>([])
   const [importing, setImporting] = useState(false)
   const [ingestingPath, setIngestingPath] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
   /**
    * Path of the source-tree node currently in "click again to
    * confirm delete" state. Lifted up here (rather than living
@@ -75,104 +80,82 @@ export function SourcesView() {
     loadSources()
   }, [loadSources])
 
-  async function handleImport() {
-    if (!project) return
-
-    // Web mode: use a simple path prompt for file import
-    const input = window.prompt("Enter source file paths (comma-separated):")
-    if (!input) return
-
-    const paths = input.split(",").map((p) => p.trim()).filter(Boolean)
-    if (paths.length === 0) return
+  async function handleFileImport(files: FileList | null) {
+    if (!project || !files || files.length === 0) return
 
     setImporting(true)
     const pp = normalizePath(project.path)
-
-    const importedPaths: string[] = []
-    for (const sourcePath of paths) {
-      const originalName = getFileName(sourcePath) || "unknown"
-      const destPath = await getUniqueDestPath(`${pp}/raw/sources`, originalName)
-      try {
-        await copyFile(sourcePath, destPath)
-        importedPaths.push(destPath)
-        // Pre-process file (extract text from PDF, etc.) for instant preview later
-        preprocessFile(destPath).catch(() => {})
-      } catch (err) {
-        console.error(`Failed to import ${originalName}:`, err)
-      }
-    }
-
-    setImporting(false)
-    await loadSources()
-
-    // Enqueue for serial ingest (runs in background via ingest queue)
-    if (hasUsableLlm(llmConfig)) {
-      for (const destPath of importedPaths) {
-        enqueueIngest(project.id, destPath).catch((err) =>
-          console.error(`Failed to enqueue ingest:`, err)
-        )
-      }
-    }
-  }
-
-  async function handleImportFolder() {
-    if (!project) return
-
-    // Web mode: use a simple path prompt for folder import
-    const selected = window.prompt("Enter the source folder path:")
-    if (!selected) return
-
-    setImporting(true)
-    const pp = normalizePath(project.path)
-    const folderName = getFileName(selected) || "imported"
-    const destDir = `${pp}/raw/sources/${folderName}`
+    const destDir = `${pp}/raw/sources`
 
     try {
-      // Recursively copy the folder via HTTP API
-      const copiedFiles: string[] = await copyDirectory(selected, destDir)
+      const uploaded = await uploadFiles(Array.from(files), destDir)
 
-      console.log(`[Folder Import] Copied ${copiedFiles.length} files from ${folderName}`)
-
-      // Preprocess all files
-      for (const filePath of copiedFiles) {
-        preprocessFile(filePath).catch(() => {})
+      for (const f of uploaded) {
+        preprocessFile(f.path).catch((err) =>
+          console.warn("Preprocess failed for", f.path, err)
+        )
       }
 
       setImporting(false)
       await loadSources()
 
-      // Build ingest tasks with folder context
       if (hasUsableLlm(llmConfig)) {
-        const tasks = copiedFiles
-          .filter((fp) => {
-            const ext = fp.split(".").pop()?.toLowerCase() ?? ""
-            // Only ingest text-based files, skip images/media
-            return ["md", "mdx", "txt", "pdf", "docx", "pptx", "xlsx", "xls",
-                    "csv", "json", "html", "htm", "rtf", "xml", "yaml", "yml"].includes(ext)
+        for (const f of uploaded) {
+          const ext = f.name.split(".").pop()?.toLowerCase() ?? ""
+          if (INGESTABLE_EXTS.includes(ext)) {
+            enqueueIngest(project.id, f.path).catch((err) =>
+              console.error("Failed to enqueue ingest:", err)
+            )
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to upload files:", err)
+      setImporting(false)
+    }
+  }
+
+  async function handleFolderImport(files: FileList | null) {
+    if (!project || !files || files.length === 0) return
+
+    setImporting(true)
+    const pp = normalizePath(project.path)
+    const destDir = `${pp}/raw/sources`
+
+    try {
+      const uploaded = await uploadFiles(Array.from(files), destDir)
+
+      for (const f of uploaded) {
+        preprocessFile(f.path).catch((err) =>
+          console.warn("Preprocess failed for", f.path, err)
+        )
+      }
+
+      setImporting(false)
+      await loadSources()
+
+      if (hasUsableLlm(llmConfig)) {
+        const tasks = uploaded
+          .filter((f) => {
+            const ext = f.name.split(".").pop()?.toLowerCase() ?? ""
+            return INGESTABLE_EXTS.includes(ext)
           })
-          .map((filePath) => {
-            // Build folder context from relative path. On Windows the
-            // Rust-returned filePath uses backslashes while destDir was
-            // composed with forward slashes — normalize both sides before
-            // the replace so this works on every platform.
-            const normFilePath = normalizePath(filePath)
-            const normDestDir = normalizePath(destDir)
-            const relPath = normFilePath.replace(normDestDir + "/", "")
+          .map((f) => {
+            const relPath = f.path.replace(destDir + "/", "")
             const parts = relPath.split("/")
-            parts.pop() // remove filename
-            const context = parts.length > 0
-              ? `${folderName} > ${parts.join(" > ")}`
-              : folderName
-            return { sourcePath: filePath, folderContext: context }
+            parts.pop()
+            const folderContext = parts.length > 0
+              ? parts.join(" > ")
+              : ""
+            return { sourcePath: f.path, folderContext }
           })
 
         if (tasks.length > 0) {
           await enqueueBatch(project.id, tasks)
-          console.log(`[Folder Import] Enqueued ${tasks.length} files for ingest`)
         }
       }
     } catch (err) {
-      console.error(`Failed to import folder:`, err)
+      console.error("Failed to upload folder:", err)
       setImporting(false)
     }
   }
@@ -210,7 +193,7 @@ export function SourcesView() {
       }
     } catch (err) {
       console.error("Failed to delete source:", err)
-      window.alert(`Failed to delete: ${err}`)
+      window.alert(`删除失败: ${err}`)
     }
   }
 
@@ -262,7 +245,7 @@ export function SourcesView() {
       }
     } catch (err) {
       console.error("Failed to delete folder:", err)
-      window.alert(`Failed to delete folder: ${err}`)
+      window.alert(`删除文件夹失败: ${err}`)
     }
   }
 
@@ -438,19 +421,42 @@ export function SourcesView() {
 
   return (
     <div className="flex h-full flex-col">
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept={INGESTABLE_EXTS.map(e => `.${e}`).join(",")}
+        className="hidden"
+        onChange={(e) => {
+          handleFileImport(e.target.files)
+          e.target.value = ""
+        }}
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        className="hidden"
+        // webkitdirectory is a non-standard attribute supported by Chrome/Edge/Firefox
+        {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+        onChange={(e) => {
+          handleFolderImport(e.target.files)
+          e.target.value = ""
+        }}
+      />
+
       <div className="flex items-center justify-between border-b px-4 py-3">
         <h2 className="text-sm font-semibold">{t("sources.title")}</h2>
         <div className="flex gap-1">
           <Button variant="ghost" size="icon" onClick={loadSources} title={t("sources.refresh", "刷新")}>
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button size="sm" onClick={handleImport} disabled={importing}>
-            <Plus className="mr-1 h-4 w-4" />
+          <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+            <Upload className="mr-1 h-4 w-4" />
             {importing ? t("sources.importing") : t("sources.import")}
           </Button>
-          <Button size="sm" onClick={handleImportFolder} disabled={importing}>
-            <Plus className="mr-1 h-4 w-4" />
-            {t("sources.importFolder", "Folder")}
+          <Button size="sm" onClick={() => folderInputRef.current?.click()} disabled={importing}>
+            <FolderUp className="mr-1 h-4 w-4" />
+            {t("sources.importFolder", "文件夹")}
           </Button>
         </div>
       </div>
@@ -461,12 +467,12 @@ export function SourcesView() {
             <p>{t("sources.noSources")}</p>
             <p>{t("sources.importHint")}</p>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleImport}>
-                <Plus className="mr-1 h-4 w-4" />
+              <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="mr-1 h-4 w-4" />
                 {t("sources.importFiles")}
               </Button>
-              <Button variant="outline" size="sm" onClick={handleImportFolder}>
-                <Plus className="mr-1 h-4 w-4" />
+              <Button variant="outline" size="sm" onClick={() => folderInputRef.current?.click()}>
+                <FolderUp className="mr-1 h-4 w-4" />
                 {t("sources.importFolder", "文件夹")}
               </Button>
             </div>
@@ -493,49 +499,6 @@ export function SourcesView() {
       </div>
     </div>
   )
-}
-
-/**
- * Generate a unique destination path. If file already exists, adds date/counter suffix.
- * "file.pdf" → "file.pdf" (first time)
- * "file.pdf" → "file-20260406.pdf" (conflict)
- * "file.pdf" → "file-20260406-2.pdf" (second conflict same day)
- */
-async function getUniqueDestPath(dir: string, fileName: string): Promise<string> {
-  const basePath = `${dir}/${fileName}`
-
-  // Check if file exists by trying to read it
-  try {
-    await readFile(basePath)
-  } catch {
-    // File doesn't exist — use original name
-    return basePath
-  }
-
-  // File exists — add date suffix
-  const ext = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".")) : ""
-  const nameWithoutExt = ext ? fileName.slice(0, -ext.length) : fileName
-  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "")
-
-  const withDate = `${dir}/${nameWithoutExt}-${date}${ext}`
-  try {
-    await readFile(withDate)
-  } catch {
-    return withDate
-  }
-
-  // Date suffix also exists — add counter
-  for (let i = 2; i <= 99; i++) {
-    const withCounter = `${dir}/${nameWithoutExt}-${date}-${i}${ext}`
-    try {
-      await readFile(withCounter)
-    } catch {
-      return withCounter
-    }
-  }
-
-  // Shouldn't happen, but fallback
-  return `${dir}/${nameWithoutExt}-${date}-${Date.now()}${ext}`
 }
 
 function filterTree(nodes: FileNode[]): FileNode[] {
@@ -653,8 +616,8 @@ function SourceTree({
                   onClick={() => handleDeleteClick(node)}
                   hint={
                     isPendingDelete
-                      ? `Click again to delete folder ${node.name} and ALL its contents`
-                      : `Delete folder ${node.name} (recursive)`
+                      ? `再次点击删除文件夹 ${node.name} 及所有内容`
+                      : `删除文件夹 ${node.name} (递归)`
                   }
                 />
               </div>

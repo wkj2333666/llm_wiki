@@ -58,3 +58,38 @@ export async function readFileAsBase64(path: string): Promise<FileBase64> {
 export async function findRelatedWikiPages(projectPath: string, sourceName: string): Promise<string[]> {
   return apiGet<string[]>('/wiki/related', { project_path: projectPath, source_name: sourceName });
 }
+
+interface UploadedFile {
+  name: string;
+  path: string;
+  size: number;
+}
+
+/**
+ * Upload files to the server via multipart/form-data.
+ * Files are saved into the `destination` directory on the server.
+ * For folder uploads, each file's relative path (webkitRelativePath)
+ * is sent alongside the file to preserve directory structure.
+ */
+export async function uploadFiles(files: File[], destination: string): Promise<UploadedFile[]> {
+  const formData = new FormData();
+  formData.append('destination', destination);
+
+  for (const file of files) {
+    const relativePath = (file as { webkitRelativePath?: string }).webkitRelativePath || file.name;
+    formData.append('files', file, relativePath);
+  }
+
+  const response = await fetch('/api/fs/upload', {
+    method: 'POST',
+    body: formData,
+    // Don't set Content-Type — browser sets it automatically with boundary for multipart
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Upload failed: ${response.status} - ${text}`);
+  }
+
+  return response.json() as Promise<UploadedFile[]>;
+}

@@ -33,7 +33,7 @@ export function ResearchPanel() {
     const topic = inputValue.trim()
     if (!topic || !project) return
     if (searchApiConfig.provider === "none" || !searchApiConfig.apiKey) {
-      window.alert("Web Search not configured. Go to Settings → Web Search to add a Tavily API key.")
+      window.alert("网页搜索未配置。请前往 设置 → 网页搜索 配置搜索服务。")
       return
     }
     queueResearch(normalizePath(project.path), topic, llmConfig, searchApiConfig)
@@ -45,10 +45,10 @@ export function ResearchPanel() {
       <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
         <div className="flex items-center gap-2">
           <Search className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-semibold">Deep Research</span>
+          <span className="text-sm font-semibold">深度研究</span>
           {(running.length > 0 || queued.length > 0) && (
             <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-              {running.length} active{queued.length > 0 ? `, ${queued.length} queued` : ""}
+              {running.length} 个活跃{queued.length > 0 ? `, ${queued.length} 个排队` : ""}
             </span>
           )}
         </div>
@@ -69,7 +69,7 @@ export function ResearchPanel() {
             if (isImeComposing(e)) return
             if (e.key === "Enter") handleStartResearch()
           }}
-          placeholder="Enter a research topic..."
+          placeholder="输入研究主题..."
           className="flex-1 rounded border bg-background px-2 py-1 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
         />
         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleStartResearch} disabled={!inputValue.trim()}>
@@ -81,8 +81,8 @@ export function ResearchPanel() {
         {tasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-xs text-muted-foreground">
             <Search className="h-8 w-8 opacity-20" />
-            <p>No research tasks yet</p>
-            <p>Enter a topic above or click "Deep Research" in Review</p>
+            <p>暂无研究任务</p>
+            <p>在上方输入主题或在 Review 中点击「深度研究」</p>
           </div>
         ) : (
           <div className="flex flex-col gap-1 p-2">
@@ -136,7 +136,7 @@ function SynthesisBlock({ synthesis, isStreaming }: { synthesis: string; isStrea
 
   return (
     <div className="mb-2 flex flex-col min-h-0">
-      <div className="mb-1 font-medium text-muted-foreground">Synthesis</div>
+      <div className="mb-1 font-medium text-muted-foreground">综合分析</div>
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto rounded bg-muted/30 p-2 prose prose-xs prose-invert max-w-none"
@@ -153,7 +153,7 @@ function SynthesisBlock({ synthesis, isStreaming }: { synthesis: string; isStrea
               ) : (
                 <ChevronDown className="h-3 w-3" />
               )}
-              Thinking{isStreaming && !answer ? "..." : ""}
+              思考{isStreaming && !answer ? "..." : ""}
             </button>
             {!thinkingCollapsed && (
               <div className="mt-1 rounded border border-muted px-2 py-1 text-[10px] text-muted-foreground opacity-70 leading-relaxed whitespace-pre-wrap">
@@ -212,12 +212,12 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
   }[task.status]
 
   const statusText = {
-    queued: "Queued",
-    searching: "Searching web...",
-    synthesizing: "Synthesizing...",
-    saving: "Saving to wiki...",
-    done: task.savedPath ? "Saved" : "Done",
-    error: "Failed",
+    queued: "排队中",
+    searching: "搜索网页...",
+    synthesizing: "综合分析...",
+    saving: "保存到 wiki...",
+    done: task.savedPath ? "已保存" : "完成",
+    error: "失败",
   }[task.status]
 
   async function handleOpenSaved() {
@@ -261,7 +261,7 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
           {task.webResults.length > 0 && (
             <div className="mb-2">
               <div className="mb-1 font-medium text-muted-foreground">
-                Sources ({task.webResults.length})
+                来源 ({task.webResults.length})
               </div>
               <div className="flex flex-col gap-1">
                 {task.webResults.map((r, i) => (
@@ -287,7 +287,7 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
             {task.savedPath && (
               <Button variant="outline" size="sm" className="h-6 text-[11px] gap-1" onClick={handleOpenSaved}>
                 <FileText className="h-3 w-3" />
-                Open
+                打开
               </Button>
             )}
             {(task.status === "done" || task.status === "error") && (
@@ -298,7 +298,7 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
                 onClick={() => onRemove(task.id)}
               >
                 <X className="h-3 w-3" />
-                Remove
+                移除
               </Button>
             )}
           </div>

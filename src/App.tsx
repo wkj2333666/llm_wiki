@@ -171,7 +171,7 @@ function App() {
           model: serverConfig.embedding.model,
         }
         const defaultSearchConfig = {
-          provider: serverConfig.search.provider as "tavily" | "none",
+          provider: serverConfig.search.provider as "tavily" | "duckduckgo" | "none",
           apiKey: serverConfig.search.apiKey,
         }
 
@@ -215,9 +215,11 @@ function App() {
           }
         }
         const savedSearchConfig = await loadSearchApiConfig()
-        if (savedSearchConfig) {
+        if (savedSearchConfig && savedSearchConfig.apiKey) {
+          // User has saved search config with API key - use it
           useWikiStore.getState().setSearchApiConfig(savedSearchConfig)
         }
+        // Otherwise keep server's default (duckduckgo works without API key)
         const savedEmbeddingConfig = await loadEmbeddingConfig()
         if (savedEmbeddingConfig) {
           useWikiStore.getState().setEmbeddingConfig(savedEmbeddingConfig)

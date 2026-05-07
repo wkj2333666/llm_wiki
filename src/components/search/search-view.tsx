@@ -198,7 +198,7 @@ export function SearchView() {
               if (isImeComposing(e)) return
               if (e.key === "Enter") doSearch(query)
             }}
-            placeholder={t("search.placeholder") + " (Enter to search)"}
+            placeholder={t("search.placeholder") + " (Enter 搜索)"}
             autoFocus
             className="w-full rounded-md border bg-background py-2 pl-9 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />
@@ -214,12 +214,12 @@ export function SearchView() {
        */}
       {searching ? (
         <div className="flex-1 p-4 text-center text-sm text-muted-foreground">
-          Searching...
+          搜索中...
         </div>
       ) : !hasSearched ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted-foreground">
           <Search className="h-8 w-8 text-muted-foreground/30" />
-          <p>Press Enter to search</p>
+          <p>按 Enter 搜索</p>
         </div>
       ) : results.length === 0 ? (
         <div className="flex-1 p-4 text-center text-sm text-muted-foreground">
@@ -228,12 +228,12 @@ export function SearchView() {
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="shrink-0 px-3 pt-3 pb-1 text-xs text-muted-foreground">
-            {results.length} page{results.length !== 1 ? "s" : ""}
+            {results.length} 页
             {imageHits.length > 0 && (
               <>
                 {" · "}
-                {matchingImages.length} image{matchingImages.length !== 1 ? "s" : ""} match
-                {supportingImages.length > 0 && ` · +${supportingImages.length} from matched pages`}
+                {matchingImages.length} 张匹配图片
+                {supportingImages.length > 0 && ` · +${supportingImages.length} 张来自匹配页面`}
               </>
             )}
           </div>
@@ -244,7 +244,7 @@ export function SearchView() {
               <div className="shrink-0 px-3 pt-1">
                 <SectionHeader
                   icon={<ImageIcon className="h-3.5 w-3.5" />}
-                  label="Images"
+                  label="图片"
                   count={visibleImages.length}
                   trailing={
                     supportingImages.length > 0 ? (
@@ -254,8 +254,8 @@ export function SearchView() {
                         className="text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
                       >
                         {showSupportingImages
-                          ? "Hide supporting"
-                          : `Show all (+${supportingImages.length})`}
+                          ? "隐藏辅助图片"
+                          : `显示全部 (+${supportingImages.length})`}
                       </button>
                     ) : null
                   }
@@ -291,7 +291,7 @@ export function SearchView() {
           <div className="shrink-0 px-3 pt-1">
             <SectionHeader
               icon={<FileText className="h-3.5 w-3.5" />}
-              label="Pages"
+              label="页面"
               count={results.length}
             />
           </div>
@@ -372,10 +372,10 @@ function Lightbox({
             {hit.alt ? (
               <div className="line-clamp-3 text-sm leading-snug">{hit.alt}</div>
             ) : (
-              <div className="text-sm italic text-muted-foreground">No caption</div>
+              <div className="text-sm italic text-muted-foreground">无标题</div>
             )}
             <div className="mt-1 truncate text-[11px] text-muted-foreground">
-              From: {hit.sourceTitle}
+              来源: {hit.sourceTitle}
             </div>
           </div>
           <button
@@ -407,7 +407,7 @@ function Lightbox({
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
           >
             <ArrowUpRight className="h-3.5 w-3.5" />
-            Jump to source document
+            打开原始文档
           </button>
         </div>
       </div>
@@ -494,7 +494,7 @@ function ImageHitCard({
             <HighlightedText text={hit.alt} query={query} />
           </div>
         ) : (
-          <div className="text-[11px] italic text-muted-foreground">No caption</div>
+          <div className="text-[11px] italic text-muted-foreground">无标题</div>
         )}
         <div className="mt-auto truncate text-[10px] text-muted-foreground">
           {hit.sourceTitle}

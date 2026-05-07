@@ -91,6 +91,7 @@ async fn main() {
         .route("/fs/read-base64", get(routes::fs::read_file_as_base64))
         .route("/fs/file", get(routes::fs::serve_file))
         .route("/fs/extract-images", post(routes::fs::extract_images))
+        .route("/fs/upload", post(routes::fs::upload_files))
         // Project
         .route("/project/list", get(routes::project::list_projects))
         .route("/project/create", post(routes::project::create_project))

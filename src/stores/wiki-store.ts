@@ -20,7 +20,7 @@ interface LlmConfig {
 }
 
 interface SearchApiConfig {
-  provider: "tavily" | "none"
+  provider: "tavily" | "duckduckgo" | "none"
   apiKey: string
 }
 

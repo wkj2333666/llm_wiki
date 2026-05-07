@@ -108,7 +108,7 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
                 type="button"
                 onClick={onRegenerate}
                 className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                title="Regenerate this response"
+                title="重新生成此回复"
               >
                 <RefreshCw className="h-3 w-3" /> Regenerate
               </button>
@@ -141,10 +141,10 @@ function CopyButton({ content }: { content: string }) {
       type="button"
       onClick={handleCopy}
       className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-      title="Copy to clipboard"
+      title="复制到剪贴板"
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-      {copied ? "Copied!" : "Copy"}
+      {copied ? "已复制" : "复制"}
     </button>
   )
 }
@@ -165,7 +165,7 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
       // (so CJK titles don't collapse to empty) and the HHMMSS
       // timestamp suffix guarantees same-day saves stay distinct.
       const firstLine = content.split("\n")[0].replace(/^#+\s*/, "").trim()
-      const title = firstLine.slice(0, 60) || "Saved Query"
+      const title = firstLine.slice(0, 60) || "已保存的查询"
       const { date, fileName } = makeQueryFileName(title)
       const filePath = `${pp}/wiki/queries/${fileName}`
 
@@ -253,10 +253,10 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
       onClick={handleSave}
       disabled={saving}
       className="self-start inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-      title="Save to wiki"
+      title="保存到 Wiki"
     >
       <BookmarkPlus className="h-3 w-3" />
-      {saved ? "Saved!" : saving ? "Saving..." : "Save to Wiki"}
+      {saved ? "已保存！" : saving ? "保存中..." : "保存到 Wiki"}
     </button>
   )
 }

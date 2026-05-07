@@ -38,7 +38,7 @@ export interface SettingsDraft {
   multimodalConcurrency: number
 
   // Web search
-  searchProvider: "tavily" | "none"
+  searchProvider: "tavily" | "duckduckgo" | "none"
   searchApiKey: string
 
   // Output preferences
