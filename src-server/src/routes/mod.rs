@@ -1,8 +1,9 @@
+pub mod auth;
+pub mod claude;
+pub mod clip;
+pub mod config;
 pub mod fs;
 pub mod project;
-pub mod vector;
-pub mod claude;
-pub mod config;
-pub mod clip;
-pub mod wiki;
 pub mod search;
+pub mod vector;
+pub mod wiki;

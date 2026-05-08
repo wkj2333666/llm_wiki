@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import {
-  FileText, FolderOpen, Search, Network, ClipboardCheck, Settings, ArrowLeftRight, ClipboardList, Globe,
+  FileText, FolderOpen, Search, Network, ClipboardCheck, Settings, ArrowLeftRight, ClipboardList, Globe, LogOut,
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useWikiStore } from "@/stores/wiki-store"
@@ -24,9 +24,10 @@ const NAV_ITEMS: { view: NavView; icon: typeof FileText; labelKey: string }[] = 
 
 interface IconSidebarProps {
   onSwitchProject: () => void
+  onLogout: () => void
 }
 
-export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
+export function IconSidebar({ onSwitchProject, onLogout }: IconSidebarProps) {
   const { t } = useTranslation()
   const activeView = useWikiStore((s) => s.activeView)
   const setActiveView = useWikiStore((s) => s.setActiveView)
@@ -176,6 +177,15 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
               <ArrowLeftRight className="h-5 w-5" />
             </TooltipTrigger>
             <TooltipContent side="right">{t("nav.switchProject")}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              onClick={onLogout}
+              className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/50 hover:text-accent-foreground"
+            >
+              <LogOut className="h-5 w-5" />
+            </TooltipTrigger>
+            <TooltipContent side="right">{t("nav.logout")}</TooltipContent>
           </Tooltip>
         </div>
       </div>

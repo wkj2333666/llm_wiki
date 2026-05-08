@@ -6,29 +6,25 @@ use axum::{
     body::Body,
 };
 
+use crate::auth_jwt;
+use crate::types::AuthUser;
 use crate::AppState;
 
 /// Auth middleware for API routes.
 ///
-/// For single-user self-hosted scenario with Caddy basicauth:
-/// - Caddy handles authentication at the reverse proxy level
-/// - API server trusts all requests (no additional auth needed)
+/// Two authentication methods are supported:
+/// 1. Legacy server token — matches `server.token`; runs as service admin
+/// 2. JWT bearer token — validates and extracts user identity
 ///
-/// If you want API-level auth, set a non-empty token in server.toml
+/// If neither succeeds, 401 is returned.
 pub async fn auth_middleware(
     State(state): State<AppState>,
-    request: Request<Body>,
+    mut request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
     let token = &state.config.server.token;
 
-    // If no token configured, trust all requests
-    // (authentication is handled by Caddy basicauth)
-    if token.is_empty() {
-        return Ok(next.run(request).await);
-    }
-
-    // If token is configured, require it
+    // Extract Authorization header
     let auth_header = request
         .headers()
         .get("Authorization")
@@ -36,7 +32,36 @@ pub async fn auth_middleware(
         .and_then(|v| v.strip_prefix("Bearer "));
 
     match auth_header {
-        Some(t) if t == token => Ok(next.run(request).await),
-        _ => Err(StatusCode::UNAUTHORIZED),
+        // Legacy server token: service admin
+        Some(t) if !token.is_empty() && t == token => {
+            tracing::info!("Auth: legacy server token accepted");
+            request.extensions_mut().insert(AuthUser::service_admin());
+            Ok(next.run(request).await)
+        }
+        // JWT token
+        Some(t) => {
+            let short = if t.len() > 16 { format!("{}...", &t[..16]) } else { t.to_string() };
+            match auth_jwt::validate_token(t, &state.jwt_secret) {
+                Ok(claims) => {
+                    tracing::info!("Auth: JWT valid for user '{}' (role: {})", claims.username, claims.role);
+                    request.extensions_mut().insert(AuthUser::from_claims(
+                        claims.sub,
+                        claims.username,
+                        claims.role,
+                    ));
+                    Ok(next.run(request).await)
+                }
+                Err(e) => {
+                    tracing::warn!("Auth: JWT validation failed (token prefix: {}): {}", short, e);
+                    Err(StatusCode::UNAUTHORIZED)
+                }
+            }
+        }
+        None => {
+            let method = request.method().to_string();
+            let uri = request.uri().to_string();
+            tracing::warn!("Auth: no Authorization header on {} {}", method, uri);
+            Err(StatusCode::UNAUTHORIZED)
+        }
     }
 }

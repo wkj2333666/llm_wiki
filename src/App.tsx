@@ -12,7 +12,9 @@ import { startClipWatcher } from "@/lib/clip-watcher"
 import { AppLayout } from "@/components/layout/app-layout"
 import { WelcomeScreen } from "@/components/project/welcome-screen"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog"
+import { LoginPage } from "@/components/auth/login-page"
 import { getServerConfig } from "@/api/config"
+import { apiGet, getAuthToken, clearAuthToken } from "@/api/client"
 import type { WikiProject } from "@/types/wiki"
 
 function App() {
@@ -24,6 +26,7 @@ function App() {
   const setActiveView = useWikiStore((s) => s.setActiveView)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [authenticated, setAuthenticated] = useState(false)
 
   // Set up auto-save and clip watcher once on mount
   useEffect(() => {
@@ -80,6 +83,7 @@ function App() {
     let cancelled = false
     const timer = setTimeout(async () => {
       if (cancelled) return
+      if (!getAuthToken()) return
       try {
         const { loadUpdateCheckState, saveUpdateCheckState } = await import(
           "@/lib/project-store"
@@ -153,6 +157,24 @@ function App() {
   useEffect(() => {
     async function init() {
       try {
+        // Check auth first
+        const token = getAuthToken()
+        if (token) {
+          try {
+            await apiGet("/auth/me")
+          } catch {
+            clearAuthToken()
+            setLoading(false)
+            return
+          }
+        } else {
+          setLoading(false)
+          return
+        }
+
+        // Auth verified
+        setAuthenticated(true)
+
         // Load server config first (from server.toml) as defaults
         const serverConfig = await getServerConfig()
         const defaultLlmConfig = {
@@ -321,12 +343,21 @@ function App() {
     setSelectedFile(null)
   }
 
+  function handleLogout() {
+    clearAuthToken()
+    setAuthenticated(false)
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-muted-foreground">
         {t("welcome.loadingProjects", "加载中...")}
       </div>
     )
+  }
+
+  if (!authenticated) {
+    return <LoginPage onLogin={() => setAuthenticated(true)} />
   }
 
   if (!project) {
@@ -347,7 +378,7 @@ function App() {
 
   return (
     <>
-      <AppLayout onSwitchProject={handleSwitchProject} />
+      <AppLayout onSwitchProject={handleSwitchProject} onLogout={handleLogout} />
       <CreateProjectDialog
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}

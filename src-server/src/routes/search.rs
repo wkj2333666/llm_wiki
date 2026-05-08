@@ -40,50 +40,65 @@ pub async fn web_search(
         }));
     }
 
-    let url = format!(
-        "https://html.duckduckgo.com/html/?q={}",
-        urlencoding::encode(&query.query)
-    );
-
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (compatible; LLMWiki/1.0)")
+        .user_agent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    let response = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("Search request failed: {}", e))?;
-
-    let html = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    // Parse DuckDuckGo HTML results
-    let results = parse_ddg_html(&html, query.limit);
+    // Try HTML endpoint first, fall back to Lite
+    let results = match search_html(&client, &query.query, query.limit).await {
+        Some(r) => r,
+        None => search_lite(&client, &query.query, query.limit)
+            .await
+            .unwrap_or_default(),
+    };
 
     Ok(Json(SearchResponse {
+        error: if results.is_empty() { Some("No results found".to_string()) } else { None },
         results,
-        error: None,
     }))
 }
 
-/// Parse DuckDuckGo HTML search results
+async fn search_html(
+    client: &reqwest::Client,
+    query: &str,
+    limit: usize,
+) -> Option<Vec<SearchResult>> {
+    let url = format!("https://html.duckduckgo.com/html/?q={}", urlencoding::encode(query));
+    let html = client.get(&url).send().await.ok()?.text().await.ok()?;
+
+    if html.contains("result__a") {
+        Some(parse_ddg_html(&html, limit))
+    } else {
+        None
+    }
+}
+
+async fn search_lite(
+    client: &reqwest::Client,
+    query: &str,
+    limit: usize,
+) -> Option<Vec<SearchResult>> {
+    let url = format!("https://lite.duckduckgo.com/lite/?q={}", urlencoding::encode(query));
+    let html = client.get(&url).send().await.ok()?.text().await.ok()?;
+
+    if html.contains("captcha") || html.contains("challenge") {
+        return None;
+    }
+
+    let results = parse_ddg_lite(&html, limit);
+    if results.is_empty() { None } else { Some(results) }
+}
+
 fn parse_ddg_html(html: &str, limit: usize) -> Vec<SearchResult> {
     let mut results = Vec::new();
 
-    // DuckDuckGo HTML structure: <a class="result__a" href="...">Title</a>
-    // Using raw string syntax with # to allow quotes inside
-    let pattern = r#"<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)</a>"#;
-    let re = regex::Regex::new(pattern).unwrap();
+    let link_pattern = r#"<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)</a>"#;
+    let re = regex::Regex::new(link_pattern).unwrap();
 
     for cap in re.captures_iter(html).take(limit) {
         let url = cap.get(1).map(|m| m.as_str()).unwrap_or_default();
         let title = cap.get(2).map(|m| clean_html(m.as_str())).unwrap_or_default();
-
-        // DuckDuckGo uses redirect URLs, extract actual URL
         let actual_url = extract_ddg_url(url);
 
         if !actual_url.is_empty() && !title.is_empty() {
@@ -95,7 +110,7 @@ fn parse_ddg_html(html: &str, limit: usize) -> Vec<SearchResult> {
         }
     }
 
-    // Extract snippets separately
+    // Extract snippets
     let snippet_pattern = r#"<a[^>]*class="result__snippet"[^>]*>([^<]+)</a>"#;
     let snippet_re = regex::Regex::new(snippet_pattern).unwrap();
     let snippets: Vec<String> = snippet_re
@@ -103,23 +118,74 @@ fn parse_ddg_html(html: &str, limit: usize) -> Vec<SearchResult> {
         .map(|cap| cap.get(1).map(|m| clean_html(m.as_str())).unwrap_or_default())
         .collect();
 
-    // Match snippets to results by index
     for (i, snippet) in snippets.iter().take(results.len()).enumerate() {
         if i < results.len() {
             results[i].snippet = snippet.clone();
         }
     }
 
+    // Try fallback: extract snippets from result__snippet spans (not links)
+    if results.iter().all(|r| r.snippet.is_empty()) {
+        let fallback = r#"<span[^>]*class="result__snippet"[^>]*>([^<]+)</span>"#;
+        let fb_re = regex::Regex::new(fallback).unwrap();
+        let fb_snippets: Vec<String> = fb_re
+            .captures_iter(html)
+            .map(|cap| cap.get(1).map(|m| clean_html(m.as_str())).unwrap_or_default())
+            .collect();
+        for (i, snippet) in fb_snippets.iter().take(results.len()).enumerate() {
+            if i < results.len() {
+                results[i].snippet = snippet.clone();
+            }
+        }
+    }
+
     results
 }
 
-/// Extract actual URL from DuckDuckGo redirect URL
+/// Parse DuckDuckGo Lite results: <a rel="nofollow" href="//duckduckgo.com/l/?uddg=...">Title</a>
+fn parse_ddg_lite(html: &str, limit: usize) -> Vec<SearchResult> {
+    let mut results = Vec::new();
+
+    // Lite format: result rows are <tr> with <td> containing links and snippets
+    // Links: <a rel="nofollow" href="...">Title</a>
+    // Snippets: <td class="result-snippet">snippet text</td>
+
+    let link_re = regex::Regex::new(
+        r#"<a[^>]*rel="nofollow"[^>]*href="([^"]+)"[^>]*>([^<]+)</a>"#
+    ).unwrap();
+
+    let snippet_re = regex::Regex::new(
+        r#"<td[^>]*class="result-snippet"[^>]*>([^<]*(?:<[^/][^>]*>[^<]*</[^>]*>[^<]*)*)</td>"#
+    ).unwrap();
+
+    for cap in link_re.captures_iter(html).take(limit) {
+        let url = cap.get(1).map(|m| m.as_str()).unwrap_or_default();
+        let title = cap.get(2).map(|m| clean_html(m.as_str())).unwrap_or_default();
+        let actual_url = extract_ddg_url(url);
+
+        if !actual_url.is_empty() && !title.is_empty() {
+            results.push(SearchResult {
+                title,
+                url: actual_url,
+                snippet: String::new(),
+            });
+        }
+    }
+
+    for (i, cap) in snippet_re.captures_iter(html).take(results.len()).enumerate() {
+        let snippet = cap.get(1).map(|m| clean_html(m.as_str())).unwrap_or_default();
+        if i < results.len() {
+            results[i].snippet = snippet;
+        }
+    }
+
+    results
+}
+
 fn extract_ddg_url(ddg_url: &str) -> String {
-    // DuckDuckGo URL format: /l/?uddg=https%3A%2F%2Fexample.com
     if ddg_url.contains("uddg=") {
         let start = ddg_url.find("uddg=").map(|i| i + 5).unwrap_or(0);
         let encoded = &ddg_url[start..];
-        // Find end of encoded URL (before next & or end)
         let end = encoded.find('&').unwrap_or(encoded.len());
         let encoded_url = &encoded[..end];
         urlencoding::decode(encoded_url).unwrap_or_default().to_string()
@@ -130,7 +196,6 @@ fn extract_ddg_url(ddg_url: &str) -> String {
     }
 }
 
-/// Clean HTML entities from text
 fn clean_html(text: &str) -> String {
     text
         .replace("&amp;", "&")

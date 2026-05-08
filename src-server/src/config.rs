@@ -2,13 +2,33 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::env;
 
+use crate::types;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerConfig {
     pub port: u16,
     pub token: String,
+    pub jwt_secret: String,
     pub data_dir: PathBuf,
     pub static_dir: PathBuf,
     pub projects_dir: PathBuf,
+    #[serde(default)]
+    pub users: Vec<UserConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct UserConfig {
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+    #[serde(default)]
+    pub password_hash: String,
+    #[serde(default = "default_role")]
+    pub role: String,
+}
+
+fn default_role() -> String {
+    types::ROLE_USER.into()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -49,6 +69,7 @@ impl Default for ServerConfig {
         Self {
             port: 3000,
             token: String::new(),
+            jwt_secret: String::new(),
             data_dir: dirs::data_local_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join("llm-wiki-server"),
@@ -56,6 +77,7 @@ impl Default for ServerConfig {
             projects_dir: dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join("wiki-projects"),
+            users: Vec::new(),
         }
     }
 }
@@ -140,6 +162,9 @@ impl AppConfig {
         }
         if let Ok(port) = env::var("LLM_WIKI_PORT") {
             config.server.port = port.parse().unwrap_or(3000);
+        }
+        if let Ok(jwt_secret) = env::var("LLM_WIKI_JWT_SECRET") {
+            config.server.jwt_secret = jwt_secret;
         }
         if let Ok(data_dir) = env::var("LLM_WIKI_DATA_DIR") {
             config.server.data_dir = PathBuf::from(data_dir);

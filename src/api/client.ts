@@ -1,11 +1,17 @@
-/**
- * Base API client for LLM Wiki Web Server.
- *
- * Authentication is handled by Caddy reverse proxy (basicauth).
- * No API-level auth needed for single-user self-hosted scenario.
- */
-
 const API_BASE = '/api';
+const TOKEN_KEY = 'llm_wiki_token';
+
+export function setAuthToken(token: string) {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function getAuthToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
 
 export async function apiFetch<T>(
   path: string,
@@ -16,17 +22,29 @@ export async function apiFetch<T>(
     ...(options.headers as Record<string, string>),
   };
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const url = `${API_BASE}${path}`;
+  const tokenPreview = token ? `Bearer ${token.substring(0, 20)}... (len=${token.length})` : 'none';
+  console.log(`[apiFetch] ${options.method || 'GET'} ${url} | token: ${tokenPreview}`);
+
+  const response = await fetch(url, {
     ...options,
     headers,
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`API error: ${response.status} - ${text}`);
+    const body = await response.text();
+    console.error(`[apiFetch] ${response.status} on ${url} | body: ${body.substring(0, 200)}`);
+    if (response.status === 401) {
+      clearAuthToken();
+    }
+    throw new Error(`${response.status} - ${body}`);
   }
 
-  // Handle empty responses
   const text = await response.text();
   if (!text) {
     return {} as T;
@@ -53,7 +71,3 @@ export async function apiDelete<T>(path: string, body?: unknown): Promise<T> {
     body: body ? JSON.stringify(body) : undefined,
   });
 }
-
-// Placeholder functions kept for compatibility (not used when token is empty)
-export function setAuthToken(_token: string) {}
-export function getAuthToken(): string | null { return null; }

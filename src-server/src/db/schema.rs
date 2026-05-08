@@ -1,4 +1,13 @@
 pub const SCHEMA: &str = r#"
+-- Users
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'user',
+    created_at INTEGER NOT NULL
+);
+
 -- App configuration (key-value store)
 CREATE TABLE IF NOT EXISTS app_config (
     key TEXT PRIMARY KEY,

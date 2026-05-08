@@ -45,6 +45,11 @@ arrow-schema = "57"
 which = "7"
 uuid = { version = "1", features = ["v4"] }
 
+# Auth
+bcrypt = "0.16"
+jsonwebtoken = "9"
+rand = "0.8"
+
 # Misc
 chrono = { version = "0.4", features = ["clock"] }
 tracing = "0.1"

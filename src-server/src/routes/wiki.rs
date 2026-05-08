@@ -1,8 +1,11 @@
 use axum::{
-    extract::Query,
+    extract::{Query, State},
     Json,
 };
 use serde::Deserialize;
+
+use crate::types::AuthUser;
+use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct RelatedPagesQuery {
@@ -11,10 +14,13 @@ pub struct RelatedPagesQuery {
 }
 
 /// Find wiki pages related to a source file.
-/// This mirrors the Rust find_related_wiki_pages logic from src-tauri/src/commands/fs.rs
 pub async fn find_related_pages(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Query(query): Query<RelatedPagesQuery>,
 ) -> Result<Json<Vec<String>>, String> {
+    super::project::validate_user_path(&auth_user, &query.project_path, &state.config.server.projects_dir)?;
+
     let source_slug = query.source_name
         .split('.')
         .next()
@@ -27,7 +33,6 @@ pub async fn find_related_pages(
 
     let mut related = Vec::new();
 
-    // Walk through wiki directory looking for .md files
     fn walk_dir(dir: &std::path::Path, source_slug: &str, source_name: &str, related: &mut Vec<String>) {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
@@ -40,13 +45,11 @@ pub async fn find_related_pages(
                         .map(|cow| cow.into_owned())
                         .unwrap_or_default();
 
-                    // Strategy 1: Direct match on slug
                     if file_name.starts_with(source_slug) {
                         related.push(path.to_string_lossy().to_string());
                         continue;
                     }
 
-                    // Strategy 2: Check sources list in frontmatter
                     if let Ok(content) = std::fs::read_to_string(&path) {
                         if content.contains(source_name) {
                             related.push(path.to_string_lossy().to_string());

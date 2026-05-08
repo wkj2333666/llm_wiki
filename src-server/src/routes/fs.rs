@@ -1,5 +1,5 @@
 use axum::{
-    extract::Query,
+    extract::{Query, State},
     extract::Multipart,
     Json,
     response::Response,
@@ -7,7 +7,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::types::FileNode;
+use crate::types::{AuthUser, FileNode};
+use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct ReadFileQuery {
@@ -21,8 +22,11 @@ pub struct ReadFileResponse {
 
 /// Read file content (with PDF/Office extraction)
 pub async fn read_file(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Query(query): Query<ReadFileQuery>,
 ) -> Result<Json<ReadFileResponse>, String> {
+    super::project::validate_user_path(&auth_user, &query.path, &state.config.server.projects_dir)?;
     let content = crate::services::fs::read_file(query.path).await?;
     Ok(Json(ReadFileResponse { content }))
 }
@@ -35,8 +39,11 @@ pub struct WriteFileBody {
 
 /// Write file content
 pub async fn write_file(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Json(body): Json<WriteFileBody>,
 ) -> Result<(), String> {
+    super::project::validate_user_path(&auth_user, &body.path, &state.config.server.projects_dir)?;
     crate::services::fs::write_file(body.path, body.content).await
 }
 
@@ -47,8 +54,11 @@ pub struct ListDirectoryQuery {
 
 /// List directory contents
 pub async fn list_directory(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Query(query): Query<ListDirectoryQuery>,
 ) -> Result<Json<Vec<FileNode>>, String> {
+    super::project::validate_user_path(&auth_user, &query.path, &state.config.server.projects_dir)?;
     crate::services::fs::list_directory(query.path).await.map(Json)
 }
 
@@ -60,8 +70,12 @@ pub struct CopyFileBody {
 
 /// Copy file
 pub async fn copy_file(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Json(body): Json<CopyFileBody>,
 ) -> Result<(), String> {
+    super::project::validate_user_path(&auth_user, &body.source, &state.config.server.projects_dir)?;
+    super::project::validate_user_path(&auth_user, &body.destination, &state.config.server.projects_dir)?;
     crate::services::fs::copy_file(body.source, body.destination).await
 }
 
@@ -73,8 +87,12 @@ pub struct CopyDirectoryBody {
 
 /// Copy directory recursively
 pub async fn copy_directory(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Json(body): Json<CopyDirectoryBody>,
 ) -> Result<Json<Vec<String>>, String> {
+    super::project::validate_user_path(&auth_user, &body.source, &state.config.server.projects_dir)?;
+    super::project::validate_user_path(&auth_user, &body.destination, &state.config.server.projects_dir)?;
     crate::services::fs::copy_directory(body.source, body.destination).await.map(Json)
 }
 
@@ -85,8 +103,11 @@ pub struct PreprocessFileBody {
 
 /// Preprocess file and cache extracted text
 pub async fn preprocess_file(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Json(body): Json<PreprocessFileBody>,
 ) -> Result<Json<String>, String> {
+    super::project::validate_user_path(&auth_user, &body.path, &state.config.server.projects_dir)?;
     crate::services::fs::preprocess_file(body.path).await.map(Json)
 }
 
@@ -97,8 +118,11 @@ pub struct DeleteFileBody {
 
 /// Delete file or directory
 pub async fn delete_file(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Json(body): Json<DeleteFileBody>,
 ) -> Result<(), String> {
+    super::project::validate_user_path(&auth_user, &body.path, &state.config.server.projects_dir)?;
     crate::services::fs::delete_file(body.path).await
 }
 
@@ -109,8 +133,11 @@ pub struct CreateDirectoryBody {
 
 /// Create directory
 pub async fn create_directory(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Json(body): Json<CreateDirectoryBody>,
 ) -> Result<(), String> {
+    super::project::validate_user_path(&auth_user, &body.path, &state.config.server.projects_dir)?;
     crate::services::fs::create_directory(body.path).await
 }
 
@@ -121,8 +148,11 @@ pub struct FileExistsQuery {
 
 /// Check if file exists
 pub async fn file_exists(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Query(query): Query<FileExistsQuery>,
 ) -> Result<Json<bool>, String> {
+    super::project::validate_user_path(&auth_user, &query.path, &state.config.server.projects_dir)?;
     crate::services::fs::file_exists(query.path).await.map(Json)
 }
 
@@ -133,8 +163,11 @@ pub struct ReadFileBase64Query {
 
 /// Read file as base64 with mime type
 pub async fn read_file_as_base64(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Query(query): Query<ReadFileBase64Query>,
 ) -> Result<Json<crate::services::fs::FileBase64>, String> {
+    super::project::validate_user_path(&auth_user, &query.path, &state.config.server.projects_dir)?;
     crate::services::fs::read_file_as_base64(query.path).await.map(Json)
 }
 
@@ -145,8 +178,11 @@ pub struct ServeFileQuery {
 
 /// Serve a file directly (for images, videos, etc.)
 pub async fn serve_file(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Query(query): Query<ServeFileQuery>,
 ) -> Result<Response, String> {
+    super::project::validate_user_path(&auth_user, &query.path, &state.config.server.projects_dir)?;
     let path = query.path.clone();
     let content = tokio::task::spawn_blocking(move || {
         std::fs::read(&path)
@@ -177,8 +213,12 @@ pub struct ExtractImagesBody {
 
 /// Extract images from PDF or Office documents
 pub async fn extract_images(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     Json(body): Json<ExtractImagesBody>,
 ) -> Result<Json<Vec<crate::services::extract_images::SavedImage>>, String> {
+    super::project::validate_user_path(&auth_user, &body.source_path, &state.config.server.projects_dir)?;
+    super::project::validate_user_path(&auth_user, &body.dest_dir, &state.config.server.projects_dir)?;
     if body.is_pdf {
         crate::services::extract_images::extract_and_save_pdf_images_cmd(
             body.source_path, body.dest_dir, body.rel_to,
@@ -213,6 +253,8 @@ pub struct UploadedFile {
 /// path via the `webkitRelativePath` field — we reconstruct the
 /// directory tree under the destination.
 pub async fn upload_files(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
     mut multipart: Multipart,
 ) -> Result<Json<Vec<UploadedFile>>, String> {
     let mut destination = String::new();
@@ -224,6 +266,7 @@ pub async fn upload_files(
 
         if name == "destination" {
             destination = field.text().await.map_err(|e| format!("Failed to read destination: {}", e))?;
+            super::project::validate_user_path(&auth_user, &destination, &state.config.server.projects_dir)?;
             continue;
         }
 
