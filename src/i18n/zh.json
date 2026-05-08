@@ -140,7 +140,8 @@
       "webSearch": "网页搜索",
       "output": "输出偏好",
       "interface": "界面",
-      "about": "关于"
+      "about": "关于",
+      "admin": "管理"
     },
     "sections": {
       "llm": {
@@ -247,6 +248,36 @@
         "later": "稍后",
         "autoCheck": "应用启动时自动检查更新（每 6 小时最多一次）",
         "appDescription": "一个由 LLM 驱动的个人知识库。源代码："
+      },
+      "admin": {
+        "title": "管理",
+        "description": "管理用户和项目。",
+        "tabs": {
+          "users": "用户",
+          "projects": "项目"
+        },
+        "users": {
+          "addUser": "添加用户",
+          "editUser": "编辑用户",
+          "deleteUser": "删除用户",
+          "username": "用户名",
+          "password": "密码",
+          "newPassword": "新密码（留空保持不变）",
+          "newPasswordPlaceholder": "留空保持不变",
+          "role": "角色",
+          "createdAt": "创建时间",
+          "actions": "操作",
+          "noUsers": "暂无用户",
+          "deleteConfirm": "确定删除用户 \"{{username}}\"？"
+        },
+        "projects": {
+          "name": "名称",
+          "path": "路径",
+          "owner": "所有者",
+          "hasWiki": "Wiki",
+          "reassign": "重新分配",
+          "noProjects": "暂无项目"
+        }
       }
     }
   },

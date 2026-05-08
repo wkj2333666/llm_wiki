@@ -71,7 +71,7 @@ pub async fn bootstrap_users(
         let hash = crate::auth_pass::hash_password(&admin_password).unwrap();
         let now = chrono::Utc::now().timestamp();
 
-        create_user(pool, &admin_id, "admin", &hash, crate::types::ROLE_ADMIN, now)
+        let user = create_user(pool, &admin_id, "admin", &hash, crate::types::ROLE_ADMIN, now)
             .await
             .map_err(|e| format!("Failed to create default admin: {}", e))?;
 
@@ -80,12 +80,7 @@ pub async fn bootstrap_users(
             admin_password
         );
 
-        Some(crate::types::User {
-            id: admin_id,
-            username: "admin".into(),
-            role: crate::types::ROLE_ADMIN.into(),
-            created_at: now,
-        })
+        Some(user)
     } else {
         get_first_admin_user(pool)
             .await

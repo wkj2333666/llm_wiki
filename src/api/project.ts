@@ -6,9 +6,11 @@ import { apiGet, apiPost } from './client';
 import type { WikiProject } from '@/types/wiki';
 
 export interface ProjectInfo {
+  id?: string;
   name: string;
   path: string;
   has_wiki: boolean;
+  owner?: string;
 }
 
 export async function listProjects(): Promise<ProjectInfo[]> {

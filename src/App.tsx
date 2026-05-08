@@ -15,6 +15,7 @@ import { CreateProjectDialog } from "@/components/project/create-project-dialog"
 import { LoginPage } from "@/components/auth/login-page"
 import { getServerConfig } from "@/api/config"
 import { apiGet, getAuthToken, clearAuthToken } from "@/api/client"
+import { useAuthStore } from "@/stores/auth-store"
 import type { WikiProject } from "@/types/wiki"
 
 function App() {
@@ -161,7 +162,8 @@ function App() {
         const token = getAuthToken()
         if (token) {
           try {
-            await apiGet("/auth/me")
+            const user = await apiGet<{ id: string; username: string; role: string; created_at: number }>("/auth/me")
+            useAuthStore.getState().setUser(user)
           } catch {
             clearAuthToken()
             setLoading(false)
@@ -345,6 +347,7 @@ function App() {
 
   function handleLogout() {
     clearAuthToken()
+    useAuthStore.getState().clear()
     setAuthenticated(false)
   }
 
@@ -357,7 +360,7 @@ function App() {
   }
 
   if (!authenticated) {
-    return <LoginPage onLogin={() => setAuthenticated(true)} />
+    return <LoginPage onLogin={(user) => { useAuthStore.getState().setUser(user); setAuthenticated(true) }} />
   }
 
   if (!project) {

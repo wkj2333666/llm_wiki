@@ -92,8 +92,9 @@ async function executeResearch(
 
     if (webResults.length === 0) {
       store.updateTask(taskId, {
-        status: "done",
-        synthesis: "未找到网页搜索结果。\n\n> 请检查：\n> 1. 后端服务器是否正在运行（端口 3000）\n> 2. 搜索功能是否已在 server.toml 中启用 (`search.enabled = true`)\n> 3. 网络连接是否正常",
+        status: "error",
+        error: "未找到网页搜索结果。请检查：1. 后端服务器是否正在运行（端口 3000）2. 搜索功能是否已在 server.toml 中启用 3. 网络连接是否正常",
+        synthesis: "搜索未返回任何结果。",
       })
       onTaskFinished(pp, llmConfig, searchConfig)
       return

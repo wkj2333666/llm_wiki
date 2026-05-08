@@ -109,7 +109,8 @@
       "webSearch": "Web Search",
       "output": "Output",
       "interface": "Interface",
-      "about": "About"
+      "about": "About",
+      "admin": "Admin"
     },
     "sections": {
       "llm": {
@@ -216,6 +217,36 @@
         "later": "Later",
         "autoCheck": "Check for updates automatically on startup (at most once every 6 hours)",
         "appDescription": "An LLM-driven personal knowledge base. Source:"
+      },
+      "admin": {
+        "title": "Admin",
+        "description": "Manage users and projects.",
+        "tabs": {
+          "users": "Users",
+          "projects": "Projects"
+        },
+        "users": {
+          "addUser": "Add User",
+          "editUser": "Edit User",
+          "deleteUser": "Delete User",
+          "username": "Username",
+          "password": "Password",
+          "newPassword": "New Password (leave empty to keep)",
+          "newPasswordPlaceholder": "Leave empty to keep",
+          "role": "Role",
+          "createdAt": "Created",
+          "actions": "Actions",
+          "noUsers": "No users found",
+          "deleteConfirm": "Delete user \"{{username}}\"?"
+        },
+        "projects": {
+          "name": "Name",
+          "path": "Path",
+          "owner": "Owner",
+          "hasWiki": "Wiki",
+          "reassign": "Reassign",
+          "noProjects": "No projects found"
+        }
       }
     }
   },

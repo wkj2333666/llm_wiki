@@ -13,7 +13,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
-    routing::{get, post, delete},
+    routing::{get, post, put, delete},
     Router,
 };
 use tokio::process::Child;
@@ -136,6 +136,9 @@ async fn main() {
         .route("/api/config/last-project", get(routes::config::get_last_project))
         // Admin
         .route("/api/admin/users", get(routes::config::list_users))
+        .route("/api/admin/users", post(routes::config::create_user))
+        .route("/api/admin/users", put(routes::config::update_user))
+        .route("/api/admin/users", delete(routes::config::delete_user))
         .route("/api/admin/projects/assign", post(routes::config::assign_project_to_user))
         // Server config (for frontend)
         .route("/api/config/server", get(routes::config::get_server_config))

@@ -1,5 +1,6 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::AppState;
 use crate::db;
@@ -59,11 +60,40 @@ pub struct OpenProjectBody {
 }
 
 /// Open an existing wiki project by name under the current user's directory.
+/// Admin users can also open projects from other users' directories.
 pub async fn open_project(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Json(body): Json<OpenProjectBody>,
 ) -> Result<Json<WikiProject>, String> {
+    if auth_user.is_admin() {
+        // Search across all user directories for the named project
+        let projects_dir = &state.config.server.projects_dir;
+        if let Ok(entries) = std::fs::read_dir(projects_dir) {
+            for entry in entries.flatten() {
+                let user_dir = entry.path();
+                if !user_dir.is_dir() { continue; }
+                let candidate = user_dir.join(&body.name);
+                if candidate.is_dir() && candidate.join("wiki").exists() {
+                    let path_str = candidate.to_string_lossy().to_string();
+                    let existing = db::get_project_by_path(&state.db, &path_str)
+                        .await
+                        .map_err(|e| format!("Database error: {}", e))?;
+                    let project = existing.unwrap_or_else(|| {
+                        let id = uuid::Uuid::new_v4().to_string();
+                        WikiProject { id, name: body.name.clone(), path: path_str }
+                    });
+                    db::add_to_recent_projects(&state.db, &project, Some(&auth_user.user_id))
+                        .await
+                        .map_err(|e| format!("Failed to update project: {}", e))?;
+                    tracing::info!("Admin '{}' opened project '{}'", auth_user.username, project.name);
+                    return Ok(Json(project));
+                }
+            }
+        }
+        return Err(format!("Project '{}' not found", body.name));
+    }
+
     let root = state.config.server.projects_dir
         .join(&auth_user.user_id)
         .join(&body.name);
@@ -156,10 +186,14 @@ pub async fn open_project_by_path(
 
 #[derive(Serialize)]
 pub struct ProjectInfo {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
     name: String,
     path: String,
     has_wiki: bool,
     last_opened_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    owner: Option<String>,
 }
 
 /// List projects: admin sees all, regular users see only their own.
@@ -177,10 +211,17 @@ pub async fn list_projects(
     let mut projects = Vec::new();
 
     if auth_user.is_admin() {
-        // Admin: get all projects from DB and scan all user directories
-        let db_projects_with_ts = db::get_all_projects_with_ts(&state.db)
+        let db_projects_with_owner = db::get_all_projects_with_owner(&state.db)
             .await
             .map_err(|e| format!("Database error: {}", e))?;
+
+        // Index by path for O(1) lookup
+        let db_map: HashMap<&str, &(WikiProject, i64, Option<String>)> = db_projects_with_owner
+            .iter()
+            .map(|item| (item.0.path.as_str(), item))
+            .collect();
+
+        let mut seen = std::collections::HashSet::new();
 
         // Scan all user directories under projects_dir
         if let Ok(entries) = std::fs::read_dir(projects_dir) {
@@ -201,16 +242,16 @@ pub async fn list_projects(
                             let has_wiki = path.join("wiki").exists();
                             let path_str = path.to_string_lossy().to_string();
 
-                            let last_opened_at = db_projects_with_ts
-                                .iter()
-                                .find(|(p, _)| p.path == path_str)
-                                .map(|(_, ts)| *ts);
+                            seen.insert(path_str.clone());
+                            let db_match = db_map.get(path_str.as_str());
 
                             projects.push(ProjectInfo {
+                                id: db_match.map(|(p, _, _)| p.id.clone()),
                                 name,
                                 path: path_str,
                                 has_wiki,
-                                last_opened_at,
+                                last_opened_at: db_match.map(|(_, ts, _)| *ts),
+                                owner: db_match.and_then(|(_, _, o)| o.clone()),
                             });
                         }
                     }
@@ -218,23 +259,29 @@ pub async fn list_projects(
             }
         }
 
-        // Also include DB-only projects not found on disk
-        for (db_proj, ts) in &db_projects_with_ts {
-            if !projects.iter().any(|p: &ProjectInfo| p.path == db_proj.path) {
+        // Include DB-only projects not found on disk
+        for (db_proj, ts, owner) in &db_projects_with_owner {
+            if !seen.contains(db_proj.path.as_str()) {
                 let path = std::path::PathBuf::from(&db_proj.path);
                 projects.push(ProjectInfo {
+                    id: Some(db_proj.id.clone()),
                     name: db_proj.name.clone(),
                     path: db_proj.path.clone(),
                     has_wiki: path.join("wiki").exists(),
                     last_opened_at: Some(*ts),
+                    owner: owner.clone(),
                 });
             }
         }
     } else {
-        // Regular user: only see own projects
-        let db_projects_with_ts = db::get_user_projects_with_ts(&state.db, &auth_user.user_id)
+        let db_projects_with_owner = db::get_user_projects_with_owner(&state.db, &auth_user.user_id)
             .await
             .map_err(|e| format!("Database error: {}", e))?;
+
+        let db_map: HashMap<&str, &(WikiProject, i64, Option<String>)> = db_projects_with_owner
+            .iter()
+            .map(|item| (item.0.path.as_str(), item))
+            .collect();
 
         let user_project_dir = projects_dir.join(&auth_user.user_id);
         if user_project_dir.exists() {
@@ -250,16 +297,15 @@ pub async fn list_projects(
                         let has_wiki = path.join("wiki").exists();
                         let path_str = path.to_string_lossy().to_string();
 
-                        let last_opened_at = db_projects_with_ts
-                            .iter()
-                            .find(|(p, _)| p.path == path_str)
-                            .map(|(_, ts)| *ts);
+                        let db_match = db_map.get(path_str.as_str());
 
                         projects.push(ProjectInfo {
+                            id: db_match.map(|(p, _, _)| p.id.clone()),
                             name,
                             path: path_str,
                             has_wiki,
-                            last_opened_at,
+                            last_opened_at: db_match.map(|(_, ts, _)| *ts),
+                            owner: db_match.and_then(|(_, _, o)| o.clone()),
                         });
                     }
                 }

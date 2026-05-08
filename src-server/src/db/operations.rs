@@ -68,13 +68,10 @@ pub async fn get_project_by_id(pool: &SqlitePool, project_id: &str) -> Result<Op
     Ok(row.map(|(id, name, path)| WikiProject { id, name, path }))
 }
 
-/// Get projects for a specific user with last_opened_at timestamps
-pub async fn get_user_projects_with_ts(
-    pool: &SqlitePool,
-    user_id: &str,
-) -> Result<Vec<(WikiProject, i64)>, sqlx::Error> {
-    let rows = sqlx::query_as::<_, (String, String, String, i64)>(
-        "SELECT id, name, path, last_opened_at FROM projects WHERE user_id = ? ORDER BY last_opened_at DESC"
+/// Get projects for a specific user (ordered by last_opened_at DESC)
+pub async fn get_user_projects(pool: &SqlitePool, user_id: &str) -> Result<Vec<WikiProject>, sqlx::Error> {
+    let rows = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT id, name, path FROM projects WHERE user_id = ? ORDER BY last_opened_at DESC"
     )
     .bind(user_id)
     .fetch_all(pool)
@@ -82,33 +79,21 @@ pub async fn get_user_projects_with_ts(
 
     Ok(rows
         .into_iter()
-        .map(|(id, name, path, ts)| (WikiProject { id, name, path }, ts))
+        .map(|(id, name, path)| WikiProject { id, name, path })
         .collect())
-}
-
-/// Get projects for a specific user (ordered by last_opened_at DESC)
-pub async fn get_user_projects(pool: &SqlitePool, user_id: &str) -> Result<Vec<WikiProject>, sqlx::Error> {
-    Ok(get_user_projects_with_ts(pool, user_id).await?.into_iter().map(|(p, _)| p).collect())
 }
 
 /// Get all projects regardless of user (admin use)
 pub async fn get_all_projects(pool: &SqlitePool) -> Result<Vec<WikiProject>, sqlx::Error> {
-    Ok(get_all_projects_with_ts(pool).await?.into_iter().map(|(p, _)| p).collect())
-}
-
-/// Get all projects with last_opened_at timestamps (admin use)
-pub async fn get_all_projects_with_ts(
-    pool: &SqlitePool,
-) -> Result<Vec<(WikiProject, i64)>, sqlx::Error> {
-    let rows = sqlx::query_as::<_, (String, String, String, i64)>(
-        "SELECT id, name, path, last_opened_at FROM projects ORDER BY last_opened_at DESC"
+    let rows = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT id, name, path FROM projects ORDER BY last_opened_at DESC"
     )
     .fetch_all(pool)
     .await?;
 
     Ok(rows
         .into_iter()
-        .map(|(id, name, path, ts)| (WikiProject { id, name, path }, ts))
+        .map(|(id, name, path)| WikiProject { id, name, path })
         .collect())
 }
 
@@ -160,7 +145,7 @@ pub async fn add_to_recent_projects(pool: &SqlitePool, project: &WikiProject, us
 
 // ── User operations ──────────────────────────────────────────────
 
-/// Create a new user
+/// Create a new user, returning the created user
 pub async fn create_user(
     pool: &SqlitePool,
     id: &str,
@@ -168,18 +153,19 @@ pub async fn create_user(
     password_hash: &str,
     role: &str,
     created_at: i64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)"
+) -> Result<User, sqlx::Error> {
+    let row = sqlx::query_as::<_, (String, String, String, i64)>(
+        "INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id, username, role, created_at"
     )
     .bind(id)
     .bind(username)
     .bind(password_hash)
     .bind(role)
     .bind(created_at)
-    .execute(pool)
+    .fetch_one(pool)
     .await?;
-    Ok(())
+
+    Ok(User { id: row.0, username: row.1, role: row.2, created_at: row.3 })
 }
 
 /// Get user by username
@@ -307,6 +293,101 @@ pub async fn assign_project_user(pool: &SqlitePool, project_path: &str, user_id:
         .execute(pool)
         .await?;
     Ok(())
+}
+
+// ── Admin operations ──────────────────────────────────────────────
+
+/// Count users with a given role
+pub async fn count_users_by_role(pool: &SqlitePool, role: &str) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE role = ?")
+        .bind(role)
+        .fetch_one(pool)
+        .await
+}
+
+/// Update user fields. Only updates fields that are Some.
+pub async fn update_user_fields(
+    pool: &SqlitePool,
+    username: &str,
+    password_hash: Option<&str>,
+    role: Option<&str>,
+) -> Result<bool, sqlx::Error> {
+    match (password_hash, role) {
+        (Some(ph), Some(r)) => {
+            sqlx::query("UPDATE users SET password_hash = ?, role = ? WHERE username = ?")
+                .bind(ph).bind(r).bind(username)
+                .execute(pool).await
+        }
+        (Some(ph), None) => {
+            sqlx::query("UPDATE users SET password_hash = ? WHERE username = ?")
+                .bind(ph).bind(username)
+                .execute(pool).await
+        }
+        (None, Some(r)) => {
+            sqlx::query("UPDATE users SET role = ? WHERE username = ?")
+                .bind(r).bind(username)
+                .execute(pool).await
+        }
+        (None, None) => return Ok(false),
+    }
+    .map(|r| r.rows_affected() > 0)
+}
+
+/// Reassign all projects from one user to another
+pub async fn reassign_user_projects(
+    pool: &SqlitePool,
+    from_user_id: &str,
+    to_user_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE projects SET user_id = ? WHERE user_id = ?")
+        .bind(to_user_id)
+        .bind(from_user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Get all projects with owner username (admin view)
+pub async fn get_all_projects_with_owner(
+    pool: &SqlitePool,
+) -> Result<Vec<(crate::types::WikiProject, i64, Option<String>)>, sqlx::Error> {
+    let rows = sqlx::query_as::<_, (String, String, String, i64, Option<String>)>(
+        "SELECT p.id, p.name, p.path, p.last_opened_at, u.username \
+         FROM projects p LEFT JOIN users u ON p.user_id = u.id \
+         ORDER BY p.last_opened_at DESC"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(id, name, path, ts, owner)| {
+            (crate::types::WikiProject { id, name, path }, ts, owner)
+        })
+        .collect())
+}
+
+/// Get user's projects with owner username
+pub async fn get_user_projects_with_owner(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Vec<(crate::types::WikiProject, i64, Option<String>)>, sqlx::Error> {
+    let rows = sqlx::query_as::<_, (String, String, String, i64, Option<String>)>(
+        "SELECT p.id, p.name, p.path, p.last_opened_at, u.username \
+         FROM projects p LEFT JOIN users u ON p.user_id = u.id \
+         WHERE p.user_id = ? \
+         ORDER BY p.last_opened_at DESC"
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(id, name, path, ts, owner)| {
+            (crate::types::WikiProject { id, name, path }, ts, owner)
+        })
+        .collect())
 }
 
 // ── Project operations ───────────────────────────────────────────

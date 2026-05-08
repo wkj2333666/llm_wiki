@@ -4,13 +4,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { setAuthToken, apiPost } from "@/api/client"
+import type { AuthUser } from "@/stores/auth-store"
 
 interface LoginPageProps {
-  onLogin: () => void
+  onLogin: (user: AuthUser) => void
 }
 
 interface LoginResponse {
-  token: string
+  token: string;
+  user: AuthUser;
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
@@ -28,7 +30,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     try {
       const data = await apiPost<LoginResponse>("/auth/login", { username, password })
       setAuthToken(data.token)
-      onLogin()
+      onLogin(data.user)
     } catch (err) {
       const msg = err instanceof Error && err.message.startsWith("401")
         ? t("auth.invalidCredentials", "Invalid username or password")

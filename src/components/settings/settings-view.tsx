@@ -7,6 +7,7 @@ import {
   Palette,
   Info,
   Image as ImageIcon,
+  Shield,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/i18n"
@@ -23,6 +24,8 @@ import { WebSearchSection } from "./sections/web-search-section"
 import { OutputSection } from "./sections/output-section"
 import { InterfaceSection } from "./sections/interface-section"
 import { AboutSection } from "./sections/about-section"
+import { AdminSection } from "./sections/admin-section"
+import { useAuthStore } from "@/stores/auth-store"
 
 type CategoryId =
   | "llm"
@@ -32,6 +35,7 @@ type CategoryId =
   | "output"
   | "interface"
   | "about"
+  | "admin"
 
 interface Category {
   id: CategoryId
@@ -41,16 +45,6 @@ interface Category {
   labelKey: string
   icon: typeof Bot
 }
-
-const CATEGORIES: Category[] = [
-  { id: "llm", labelKey: "settings.categories.llm", icon: Bot },
-  { id: "embedding", labelKey: "settings.categories.embedding", icon: Binary },
-  { id: "multimodal", labelKey: "settings.categories.multimodal", icon: ImageIcon },
-  { id: "web-search", labelKey: "settings.categories.webSearch", icon: Globe },
-  { id: "output", labelKey: "settings.categories.output", icon: Languages },
-  { id: "interface", labelKey: "settings.categories.interface", icon: Palette },
-  { id: "about", labelKey: "settings.categories.about", icon: Info },
-]
 
 function initialDraft(
   llm: ReturnType<typeof useWikiStore.getState>["llmConfig"],
@@ -115,6 +109,23 @@ export function SettingsView() {
   // preference so the more aggressive interruption only fires once
   // per version.
   const updateAvailable = useUpdateStore((s) => hasAvailableUpdate(s))
+  const isAdmin = useAuthStore((s) => s.isAdmin)
+
+  const CATEGORIES: Category[] = useMemo(() => {
+    const base: Category[] = [
+      { id: "llm", labelKey: "settings.categories.llm", icon: Bot },
+      { id: "embedding", labelKey: "settings.categories.embedding", icon: Binary },
+      { id: "multimodal", labelKey: "settings.categories.multimodal", icon: ImageIcon },
+      { id: "web-search", labelKey: "settings.categories.webSearch", icon: Globe },
+      { id: "output", labelKey: "settings.categories.output", icon: Languages },
+      { id: "interface", labelKey: "settings.categories.interface", icon: Palette },
+      { id: "about", labelKey: "settings.categories.about", icon: Info },
+    ]
+    if (isAdmin) {
+      base.push({ id: "admin", labelKey: "settings.categories.admin", icon: Shield })
+    }
+    return base
+  }, [isAdmin])
 
   const [active, setActive] = useState<CategoryId>("llm")
   const [saved, setSaved] = useState(false)
@@ -249,6 +260,8 @@ export function SettingsView() {
         return <InterfaceSection draft={draft} setDraft={setDraft} />
       case "about":
         return <AboutSection />
+      case "admin":
+        return <AdminSection />
     }
   }, [active, draft, setDraft])
 
@@ -312,7 +325,7 @@ export function SettingsView() {
         {/* Global Save bar hidden for sections that persist inline:
             - "llm" saves per-row on every edit (independent per-preset state)
             - "about" has no editable fields */}
-        {active !== "about" && active !== "llm" && (
+        {active !== "about" && active !== "llm" && active !== "admin" && (
           <div className="shrink-0 border-t bg-background/80 backdrop-blur px-8 py-3">
             <div className="mx-auto flex max-w-2xl items-center justify-between gap-4">
               <p className="text-xs text-muted-foreground">

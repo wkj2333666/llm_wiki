@@ -37,11 +37,11 @@ export function WelcomeScreen({
     }
   }
 
-  async function handleOpenProject(name: string) {
-    setOpening(name)
+  async function handleOpenProject(path: string) {
+    setOpening(path)
     setError(null)
     try {
-      const project = await openProject(name)
+      const project = await openProject(path)
       onSelectProject(project)
     } catch (err) {
       setError(String(err))
@@ -88,8 +88,8 @@ export function WelcomeScreen({
               {projects.map((proj) => (
                 <button
                   key={proj.name}
-                  onClick={() => handleOpenProject(proj.name)}
-                  disabled={opening === proj.name || !proj.has_wiki}
+                  onClick={() => handleOpenProject(proj.path)}
+                  disabled={opening === proj.path || !proj.has_wiki}
                   className="group flex w-full items-center justify-between border-b px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="min-w-0 flex-1">
@@ -102,7 +102,7 @@ export function WelcomeScreen({
                     </div>
                   </div>
                   <div className="ml-2 shrink-0">
-                    {opening === proj.name ? (
+                    {opening === proj.path ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <FolderOpen className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />

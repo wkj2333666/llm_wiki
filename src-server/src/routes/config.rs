@@ -221,3 +221,158 @@ pub async fn assign_project_to_user(
 
     Ok(())
 }
+
+// ── Admin user management ────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct CreateUserBody {
+    pub username: String,
+    pub password: String,
+    pub role: String,
+}
+
+/// Create a new user (admin only)
+pub async fn create_user(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
+    Json(body): Json<CreateUserBody>,
+) -> Result<Json<crate::types::User>, String> {
+    if !auth_user.is_admin() {
+        return Err("Admin privileges required".to_string());
+    }
+    if body.role != crate::types::ROLE_ADMIN && body.role != crate::types::ROLE_USER {
+        return Err(format!("Invalid role '{}'. Must be 'admin' or 'user'.", body.role));
+    }
+    if db::get_user_by_username(&state.db, &body.username)
+        .await
+        .map_err(|e| format!("DB error: {}", e))?
+        .is_some()
+    {
+        return Err(format!("User '{}' already exists", body.username));
+    }
+
+    let id = uuid::Uuid::new_v4().to_string();
+    let password_hash = crate::auth_pass::hash_password(&body.password)
+        .map_err(|e| format!("Failed to hash password: {}", e))?;
+    let now = chrono::Utc::now().timestamp();
+
+    let user = db::create_user(&state.db, &id, &body.username, &password_hash, &body.role, now)
+        .await
+        .map_err(|e| format!("Failed to create user: {}", e))?;
+
+    tracing::info!("Admin '{}' created user '{}' (role: {})", auth_user.username, user.username, user.role);
+    Ok(Json(user))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateUserBody {
+    pub username: String,
+    #[serde(default)]
+    pub password: Option<String>,
+    #[serde(default)]
+    pub role: Option<String>,
+}
+
+/// Update a user's password and/or role (admin only)
+pub async fn update_user(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
+    Json(body): Json<UpdateUserBody>,
+) -> Result<Json<crate::types::User>, String> {
+    if !auth_user.is_admin() {
+        return Err("Admin privileges required".to_string());
+    }
+
+    let existing = db::get_user_by_username(&state.db, &body.username)
+        .await
+        .map_err(|e| format!("DB error: {}", e))?
+        .ok_or_else(|| format!("User '{}' not found", body.username))?;
+
+    // Validate role if provided
+    if let Some(ref role) = body.role {
+        if role != crate::types::ROLE_ADMIN && role != crate::types::ROLE_USER {
+            return Err(format!("Invalid role '{}'. Must be 'admin' or 'user'.", role));
+        }
+        // Prevent demoting the last admin
+        if existing.role == crate::types::ROLE_ADMIN && role == crate::types::ROLE_USER {
+            let admin_count = db::count_users_by_role(&state.db, crate::types::ROLE_ADMIN)
+                .await
+                .map_err(|e| format!("DB error: {}", e))?;
+            if admin_count <= 1 {
+                return Err("Cannot remove the last admin".to_string());
+            }
+        }
+    }
+
+    // Hash password if provided
+    let password_hash = if let Some(ref pw) = body.password {
+        Some(crate::auth_pass::hash_password(pw).map_err(|e| format!("Failed to hash password: {}", e))?)
+    } else {
+        None
+    };
+
+    let new_role = body.role.as_deref().unwrap_or(&existing.role);
+
+    db::update_user_fields(
+        &state.db,
+        &body.username,
+        password_hash.as_deref(),
+        body.role.as_deref(),
+    )
+    .await
+    .map_err(|e| format!("Failed to update user: {}", e))?;
+
+    let user = crate::types::User {
+        role: new_role.to_string(),
+        ..existing
+    };
+
+    tracing::info!("Admin '{}' updated user '{}'", auth_user.username, user.username);
+    Ok(Json(user))
+}
+
+#[derive(Deserialize)]
+pub struct DeleteUserBody {
+    pub username: String,
+}
+
+/// Delete a user (admin only)
+pub async fn delete_user(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
+    Json(body): Json<DeleteUserBody>,
+) -> Result<(), String> {
+    if !auth_user.is_admin() {
+        return Err("Admin privileges required".to_string());
+    }
+    if auth_user.username == body.username {
+        return Err("Cannot delete yourself".to_string());
+    }
+
+    let target = db::get_user_by_username(&state.db, &body.username)
+        .await
+        .map_err(|e| format!("DB error: {}", e))?
+        .ok_or_else(|| format!("User '{}' not found", body.username))?;
+
+    // Prevent deleting the last admin
+    if target.role == crate::types::ROLE_ADMIN {
+        let admin_count = db::count_users_by_role(&state.db, crate::types::ROLE_ADMIN)
+            .await
+            .map_err(|e| format!("DB error: {}", e))?;
+        if admin_count <= 1 {
+            return Err("Cannot delete the last admin".to_string());
+        }
+    }
+
+    // Reassign projects to the current admin before deleting
+    db::reassign_user_projects(&state.db, &target.id, &auth_user.user_id)
+        .await
+        .map_err(|e| format!("Failed to reassign projects: {}", e))?;
+
+    db::delete_user(&state.db, &body.username)
+        .await
+        .map_err(|e| format!("Failed to delete user: {}", e))?;
+
+    tracing::info!("Admin '{}' deleted user '{}'", auth_user.username, body.username);
+    Ok(())
+}
