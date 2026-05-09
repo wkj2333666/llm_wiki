@@ -6,9 +6,23 @@ import { ReviewView } from "@/components/review/review-view"
 import { LintView } from "@/components/lint/lint-view"
 import { SearchView } from "@/components/search/search-view"
 import { GraphView } from "@/components/graph/graph-view"
+import { WelcomeScreen } from "@/components/project/welcome-screen"
+import type { WikiProject } from "@/types/wiki"
 
-export function ContentArea() {
+interface ContentAreaProps {
+  onCreateProject: () => void
+  onSelectProject: (project: WikiProject) => void
+}
+
+export function ContentArea({ onCreateProject, onSelectProject }: ContentAreaProps) {
   const activeView = useWikiStore((s) => s.activeView)
+  const project = useWikiStore((s) => s.project)
+
+  // Without a project, only welcome and settings are available
+  if (!project) {
+    if (activeView === "settings") return <SettingsView />
+    return <WelcomeScreen onCreateProject={onCreateProject} onSelectProject={onSelectProject} />
+  }
 
   switch (activeView) {
     case "settings":

@@ -3,6 +3,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 
 use crate::AppState;
 
@@ -28,6 +29,37 @@ pub struct SearchResponse {
     error: Option<String>,
 }
 
+/// Lazily-initialized reqwest client with cookie store enabled.
+/// Reusing the client across requests means DuckDuckGo's `d` cookie
+/// persists, avoiding repeated JS challenges.
+fn search_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .cookie_store(true)
+            .user_agent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .build()
+            .expect("Failed to build reqwest client")
+    })
+}
+
+/// Warm up DuckDuckGo cookies by visiting the homepage first.
+/// DuckDuckGo sets a `d` cookie that is required to pass the JS challenge
+/// on the HTML search endpoint.
+async fn ensure_ddg_cookies() {
+    static WARMED: OnceLock<()> = OnceLock::new();
+    if WARMED.get().is_some() {
+        return;
+    }
+    // Best-effort — if this fails, search will still try
+    let _ = search_client()
+        .get("https://duckduckgo.com/")
+        .send()
+        .await;
+    // Mark warmed regardless of outcome; we won't retry
+    let _ = WARMED.set(());
+}
+
 /// Search the web using DuckDuckGo HTML search (no API key required)
 pub async fn web_search(
     State(state): State<AppState>,
@@ -40,15 +72,15 @@ pub async fn web_search(
         }));
     }
 
-    let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    // Ensure we have DDG cookies before searching
+    ensure_ddg_cookies().await;
+
+    let client = search_client();
 
     // Try HTML endpoint first, fall back to Lite
-    let results = match search_html(&client, &query.query, query.limit).await {
+    let results = match search_html(client, &query.query, query.limit).await {
         Some(r) => r,
-        None => search_lite(&client, &query.query, query.limit)
+        None => search_lite(client, &query.query, query.limit)
             .await
             .unwrap_or_default(),
     };

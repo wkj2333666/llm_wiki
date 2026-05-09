@@ -11,13 +11,16 @@ import { ResearchPanel } from "./research-panel"
 import { ActivityPanel } from "./activity-panel"
 import { useResearchStore } from "@/stores/research-store"
 import { ErrorBoundary } from "@/components/error-boundary"
+import type { WikiProject } from "@/types/wiki"
 
 interface AppLayoutProps {
   onSwitchProject: () => void
   onLogout: () => void
+  onCreateProject: () => void
+  onSelectProject: (project: WikiProject) => void
 }
 
-export function AppLayout({ onSwitchProject, onLogout }: AppLayoutProps) {
+export function AppLayout({ onSwitchProject, onLogout, onCreateProject, onSelectProject }: AppLayoutProps) {
   const project = useWikiStore((s) => s.project)
   const selectedFile = useWikiStore((s) => s.selectedFile)
   const activeView = useWikiStore((s) => s.activeView)
@@ -84,12 +87,9 @@ export function AppLayout({ onSwitchProject, onLogout }: AppLayoutProps) {
     []
   )
 
-  // Settings is a full-width admin view — the file tree / activity panel
-  // are irrelevant there and their narrow column makes the settings form
-  // cramped. Hide both the left sidebar (and the file preview on the
-  // right) so the settings screen uses the whole content area.
-  const isSettings = activeView === "settings"
-  const hasRightPanel = !isSettings && !!(selectedFile || researchPanelOpen)
+  // Settings and Welcome are full-width views — hide file tree / activity panel
+  const isFullWidth = activeView === "settings" || activeView === "welcome"
+  const hasRightPanel = !isFullWidth && !!(selectedFile || researchPanelOpen)
 
   return (
     // Outer column layout: full-width update banner on top (when an
@@ -102,7 +102,7 @@ export function AppLayout({ onSwitchProject, onLogout }: AppLayoutProps) {
       <div className="flex min-h-0 flex-1">
         <IconSidebar onSwitchProject={onSwitchProject} onLogout={onLogout} />
         <div ref={containerRef} className="flex min-w-0 flex-1 overflow-hidden">
-        {!isSettings && (
+        {!isFullWidth && (
           <>
             {/* Left: File tree + Activity */}
             <div
@@ -124,7 +124,7 @@ export function AppLayout({ onSwitchProject, onLogout }: AppLayoutProps) {
         {/* Center: Chat or view (sources/settings/review) */}
         <div className="min-w-0 flex-1 overflow-hidden">
           <ErrorBoundary>
-            <ContentArea />
+            <ContentArea onCreateProject={onCreateProject} onSelectProject={onSelectProject} />
           </ErrorBoundary>
         </div>
 

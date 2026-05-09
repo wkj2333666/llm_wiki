@@ -73,17 +73,18 @@ async function executeResearch(
     const allResults: import("./web-search").WebSearchResult[] = []
     const seenUrls = new Set<string>()
 
-    for (const query of queries) {
-      try {
-        const results = await webSearch(query, searchConfig, 5)
-        for (const r of results) {
-          if (!seenUrls.has(r.url)) {
-            seenUrls.add(r.url)
-            allResults.push(r)
+    // Run all search queries in parallel
+    const queryResults = await Promise.allSettled(
+      queries.map((q) => webSearch(q, searchConfig, 5))
+    )
+    for (const r of queryResults) {
+      if (r.status === "fulfilled") {
+        for (const item of r.value) {
+          if (!seenUrls.has(item.url)) {
+            seenUrls.add(item.url)
+            allResults.push(item)
           }
         }
-      } catch {
-        // continue with other queries
       }
     }
 

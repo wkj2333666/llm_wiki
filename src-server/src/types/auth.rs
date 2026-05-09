@@ -1,3 +1,4 @@
+use crate::types::AppError;
 use serde::{Deserialize, Serialize};
 
 // Role constants
@@ -58,7 +59,7 @@ impl AuthUser {
 
     /// Check that `path` starts with `<projects_dir>/<self.user_id>/`.
     /// Admins bypass this check.
-    pub fn validate_path(&self, path: &str, projects_dir: &std::path::Path) -> Result<(), String> {
+    pub fn validate_path(&self, path: &str, projects_dir: &std::path::Path) -> Result<(), AppError> {
         if self.is_admin() {
             return Ok(());
         }
@@ -73,10 +74,10 @@ impl AuthUser {
             .to_string();
 
         if normalized != user_prefix_str && !normalized.starts_with(&prefix_with_sep) {
-            return Err(format!(
+            return Err(AppError::forbidden(format!(
                 "Access denied: path '{}' is outside your project directory",
                 path
-            ));
+            )));
         }
 
         Ok(())

@@ -50,7 +50,11 @@ export async function apiFetch<T>(
     return {} as T;
   }
 
-  return JSON.parse(text) as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Server returned non-JSON response (${response.status}): ${text.substring(0, 300)}`);
+  }
 }
 
 export async function apiGet<T>(path: string, params?: Record<string, string>): Promise<T> {

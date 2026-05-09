@@ -10,7 +10,6 @@ import { loadReviewItems, loadChatHistory } from "@/lib/persist"
 import { setupAutoSave } from "@/lib/auto-save"
 import { startClipWatcher } from "@/lib/clip-watcher"
 import { AppLayout } from "@/components/layout/app-layout"
-import { WelcomeScreen } from "@/components/project/welcome-screen"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog"
 import { LoginPage } from "@/components/auth/login-page"
 import { getServerConfig } from "@/api/config"
@@ -20,7 +19,6 @@ import type { WikiProject } from "@/types/wiki"
 
 function App() {
   const { t } = useTranslation()
-  const project = useWikiStore((s) => s.project)
   const setProject = useWikiStore((s) => s.setProject)
   const setFileTree = useWikiStore((s) => s.setFileTree)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
@@ -343,6 +341,7 @@ function App() {
     setProject(null)
     setFileTree([])
     setSelectedFile(null)
+    useWikiStore.getState().setActiveView("welcome")
   }
 
   function handleLogout() {
@@ -363,25 +362,14 @@ function App() {
     return <LoginPage onLogin={(user) => { useAuthStore.getState().setUser(user); setAuthenticated(true) }} />
   }
 
-  if (!project) {
-    return (
-      <>
-        <WelcomeScreen
-          onCreateProject={() => setShowCreateDialog(true)}
-          onSelectProject={handleProjectOpened}
-        />
-        <CreateProjectDialog
-          open={showCreateDialog}
-          onOpenChange={setShowCreateDialog}
-          onCreated={handleProjectOpened}
-        />
-      </>
-    )
-  }
-
   return (
     <>
-      <AppLayout onSwitchProject={handleSwitchProject} onLogout={handleLogout} />
+      <AppLayout
+        onSwitchProject={handleSwitchProject}
+        onLogout={handleLogout}
+        onCreateProject={() => setShowCreateDialog(true)}
+        onSelectProject={handleProjectOpened}
+      />
       <CreateProjectDialog
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}

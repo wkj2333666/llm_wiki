@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::AppState;
 use crate::db;
-use crate::types::{AuthUser, WikiProject};
+use crate::types::{AppError, AuthUser, WikiProject};
 
 #[derive(Deserialize)]
 pub struct CreateProjectBody {
@@ -18,7 +18,7 @@ pub async fn create_project(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Json(body): Json<CreateProjectBody>,
-) -> Result<Json<WikiProject>, String> {
+) -> Result<Json<WikiProject>, AppError> {
     let base_path = body.path
         .filter(|p| !p.trim().is_empty())
         .map(std::path::PathBuf::from)
@@ -27,16 +27,16 @@ pub async fn create_project(
     let root = base_path.join(&body.name);
 
     if root.exists() {
-        return Err(format!("Directory already exists: '{}'", root.display()));
+        return Err(AppError::conflict(format!("Directory already exists: '{}'", root.display())));
     }
 
     std::fs::create_dir_all(&root)
-        .map_err(|e| format!("Failed to create directory: {}", e))?;
+        .map_err(|e| AppError::internal(format!("Failed to create directory: {}", e)))?;
 
     std::fs::create_dir_all(root.join("wiki"))
-        .map_err(|e| format!("Failed to create wiki directory: {}", e))?;
+        .map_err(|e| AppError::internal(format!("Failed to create wiki directory: {}", e)))?;
     std::fs::create_dir_all(root.join("raw/sources"))
-        .map_err(|e| format!("Failed to create sources directory: {}", e))?;
+        .map_err(|e| AppError::internal(format!("Failed to create sources directory: {}", e)))?;
 
     let id = uuid::Uuid::new_v4().to_string();
     let project = WikiProject {
@@ -46,8 +46,7 @@ pub async fn create_project(
     };
 
     db::add_to_recent_projects(&state.db, &project, Some(&auth_user.user_id))
-        .await
-        .map_err(|e| format!("Failed to save project: {}", e))?;
+        .await?;
 
     tracing::info!("User '{}' created project '{}' at '{}'", auth_user.username, project.name, project.path);
 
@@ -65,7 +64,7 @@ pub async fn open_project(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Json(body): Json<OpenProjectBody>,
-) -> Result<Json<WikiProject>, String> {
+) -> Result<Json<WikiProject>, AppError> {
     if auth_user.is_admin() {
         // Search across all user directories for the named project
         let projects_dir = &state.config.server.projects_dir;
@@ -76,22 +75,18 @@ pub async fn open_project(
                 let candidate = user_dir.join(&body.name);
                 if candidate.is_dir() && candidate.join("wiki").exists() {
                     let path_str = candidate.to_string_lossy().to_string();
-                    let existing = db::get_project_by_path(&state.db, &path_str)
-                        .await
-                        .map_err(|e| format!("Database error: {}", e))?;
+                    let existing = db::get_project_by_path(&state.db, &path_str).await?;
                     let project = existing.unwrap_or_else(|| {
                         let id = uuid::Uuid::new_v4().to_string();
                         WikiProject { id, name: body.name.clone(), path: path_str }
                     });
-                    db::add_to_recent_projects(&state.db, &project, Some(&auth_user.user_id))
-                        .await
-                        .map_err(|e| format!("Failed to update project: {}", e))?;
+                    db::add_to_recent_projects(&state.db, &project, Some(&auth_user.user_id)).await?;
                     tracing::info!("Admin '{}' opened project '{}'", auth_user.username, project.name);
                     return Ok(Json(project));
                 }
             }
         }
-        return Err(format!("Project '{}' not found", body.name));
+        return Err(AppError::not_found(format!("Project '{}' not found", body.name)));
     }
 
     let root = state.config.server.projects_dir
@@ -99,31 +94,27 @@ pub async fn open_project(
         .join(&body.name);
 
     if !root.exists() {
-        return Err(format!("Project '{}' does not exist", body.name));
+        return Err(AppError::not_found(format!("Project '{}' does not exist", body.name)));
     }
     if !root.is_dir() {
-        return Err(format!("'{}' is not a directory", body.name));
+        return Err(AppError::bad_request(format!("'{}' is not a directory", body.name)));
     }
     if !root.join("wiki").exists() {
-        return Err(format!(
+        return Err(AppError::bad_request(format!(
             "'{}' is not a valid wiki project (missing wiki folder)",
             body.name
-        ));
+        )));
     }
 
     let path_str = root.to_string_lossy().to_string();
-    let existing = db::get_project_by_path(&state.db, &path_str)
-        .await
-        .map_err(|e| format!("Database error: {}", e))?;
+    let existing = db::get_project_by_path(&state.db, &path_str).await?;
 
     let project = existing.unwrap_or_else(|| {
         let id = uuid::Uuid::new_v4().to_string();
         WikiProject { id, name: body.name, path: path_str }
     });
 
-    db::add_to_recent_projects(&state.db, &project, Some(&auth_user.user_id))
-        .await
-        .map_err(|e| format!("Failed to update project: {}", e))?;
+    db::add_to_recent_projects(&state.db, &project, Some(&auth_user.user_id)).await?;
 
     tracing::info!("User '{}' opened project '{}'", auth_user.username, project.name);
 
@@ -141,20 +132,20 @@ pub async fn open_project_by_path(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Json(body): Json<OpenProjectByPathBody>,
-) -> Result<Json<WikiProject>, String> {
+) -> Result<Json<WikiProject>, AppError> {
     let root = std::path::PathBuf::from(&body.path);
 
     if !root.exists() {
-        return Err(format!("Path does not exist: '{}'", body.path));
+        return Err(AppError::not_found(format!("Path does not exist: '{}'", body.path)));
     }
     if !root.is_dir() {
-        return Err(format!("Path is not a directory: '{}'", body.path));
+        return Err(AppError::bad_request(format!("Path is not a directory: '{}'", body.path)));
     }
     if !root.join("wiki").exists() {
-        return Err(format!(
+        return Err(AppError::bad_request(format!(
             "Not a valid wiki project (missing wiki folder): '{}'",
             body.path
-        ));
+        )));
     }
 
     // Validate ownership
@@ -166,18 +157,14 @@ pub async fn open_project_by_path(
         .unwrap_or("Unknown")
         .to_string();
 
-    let existing = db::get_project_by_path(&state.db, &body.path)
-        .await
-        .map_err(|e| format!("Database error: {}", e))?;
+    let existing = db::get_project_by_path(&state.db, &body.path).await?;
 
     let project = existing.unwrap_or_else(|| {
         let id = uuid::Uuid::new_v4().to_string();
         WikiProject { id, name, path: body.path }
     });
 
-    db::add_to_recent_projects(&state.db, &project, Some(&auth_user.user_id))
-        .await
-        .map_err(|e| format!("Failed to update project: {}", e))?;
+    db::add_to_recent_projects(&state.db, &project, Some(&auth_user.user_id)).await?;
 
     tracing::info!("User '{}' opened project '{}' by path", auth_user.username, project.name);
 
@@ -200,20 +187,18 @@ pub struct ProjectInfo {
 pub async fn list_projects(
     State(state): State<AppState>,
     auth_user: AuthUser,
-) -> Result<Json<Vec<ProjectInfo>>, String> {
+) -> Result<Json<Vec<ProjectInfo>>, AppError> {
     let projects_dir = &state.config.server.projects_dir;
 
     if !projects_dir.exists() {
         std::fs::create_dir_all(projects_dir)
-            .map_err(|e| format!("Failed to create projects directory: {}", e))?;
+            .map_err(|e| AppError::internal(format!("Failed to create projects directory: {}", e)))?;
     }
 
     let mut projects = Vec::new();
 
     if auth_user.is_admin() {
-        let db_projects_with_owner = db::get_all_projects_with_owner(&state.db)
-            .await
-            .map_err(|e| format!("Database error: {}", e))?;
+        let db_projects_with_owner = db::get_all_projects_with_owner(&state.db).await?;
 
         // Index by path for O(1) lookup
         let db_map: HashMap<&str, &(WikiProject, i64, Option<String>)> = db_projects_with_owner
@@ -274,9 +259,7 @@ pub async fn list_projects(
             }
         }
     } else {
-        let db_projects_with_owner = db::get_user_projects_with_owner(&state.db, &auth_user.user_id)
-            .await
-            .map_err(|e| format!("Database error: {}", e))?;
+        let db_projects_with_owner = db::get_user_projects_with_owner(&state.db, &auth_user.user_id).await?;
 
         let db_map: HashMap<&str, &(WikiProject, i64, Option<String>)> = db_projects_with_owner
             .iter()
@@ -334,6 +317,6 @@ pub fn validate_user_path(
     auth_user: &AuthUser,
     path: &str,
     projects_dir: &std::path::Path,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     auth_user.validate_path(path, projects_dir)
 }

@@ -13,7 +13,8 @@
     "settings": "Settings",
     "switchProject": "Switch Project",
     "updateAvailable": "Update available",
-    "updateAvailableSuffix": " · update"
+    "updateAvailableSuffix": " · update",
+    "logout": "Logout"
   },
   "updateBanner": {
     "message": "Version {{version}} is available",

@@ -31,6 +31,7 @@ export function IconSidebar({ onSwitchProject, onLogout }: IconSidebarProps) {
   const { t } = useTranslation()
   const activeView = useWikiStore((s) => s.activeView)
   const setActiveView = useWikiStore((s) => s.setActiveView)
+  const project = useWikiStore((s) => s.project)
   const pendingCount = useReviewStore((s) => s.items.filter((i) => !i.resolved).length)
   const researchPanelOpen = useResearchStore((s) => s.panelOpen)
   const researchActiveCount = useResearchStore((s) => s.tasks.filter((t) => t.status !== "done" && t.status !== "error").length)
@@ -72,7 +73,8 @@ export function IconSidebar({ onSwitchProject, onLogout }: IconSidebarProps) {
             className="h-8 w-8 rounded-[22%]"
           />
         </div>
-        {/* Top: main nav items + Deep Research */}
+        {/* Top: main nav items + Deep Research — only when a project is open */}
+        {project && (
         <div className="flex flex-1 flex-col items-center gap-1">
           {NAV_ITEMS.map(({ view, icon: Icon, labelKey }) => (
             <Tooltip key={view}>
@@ -117,6 +119,9 @@ export function IconSidebar({ onSwitchProject, onLogout }: IconSidebarProps) {
             <TooltipContent side="right">{t("nav.deepResearch", "深度研究")}</TooltipContent>
           </Tooltip>
         </div>
+        )}
+        {/* Spacer to push bottom items down when no project */}
+        {!project && <div className="flex-1" />}
         {/* Bottom: daemon status + settings + switch project */}
         <div className="flex flex-col items-center gap-1 pb-1">
           {/* Daemon status indicator */}
